@@ -7,6 +7,9 @@
  *
  * 关键设计：**校验规则一律从目标仓库自己的脚本里 import**，Skill 的 asset 副本只作兜底。
  * 理由是每个项目的前缀白名单与阈值可以不同，用错来源会得到一份「按别的项目体检」的报告。
+ *
+ * 第二条设计：**生态探测只决定「这项检查适不适用」**。非 Node 仓库会跳过 node_modules/dist、
+ * package.json 脚本等条目并说明原因，而不是报成缺失——假缺失会污染退出码 1 的信号。
  */
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
@@ -80,6 +83,44 @@ function walk(dir, filter, prefix = '') {
   return found
 }
 
+/**
+ * 生态探测：**只用来决定「这项检查适不适用」**，不用来判断合规。
+ * 理由：把「工具不认识这门语言」写成「这个项目缺了东西」会产出假缺失，
+ * 而退出码 1 正是驱动「只补缺项」流程的信号，被假缺失污染后整个流程失去意义。
+ */
+const LANG_BY_EXT = new Map([
+  ['js', 'node'], ['mjs', 'node'], ['cjs', 'node'], ['ts', 'node'], ['tsx', 'node'], ['jsx', 'node'], ['vue', 'node'],
+  ['py', 'python'], ['go', 'go'], ['java', 'java'], ['kt', 'kotlin'], ['rs', 'rust'],
+])
+
+/** 各生态测试文件的命名形状；不在表内的语言只报数量，不判缺失 */
+const TEST_SHAPES = [
+  { lang: 'node', re: /\.(test|spec)\.[cm]?[jt]sx?$/ },
+  { lang: 'python', re: /(?:test_[^/\\]+\.py|[^/\\]+_test\.py)$/ },
+  { lang: 'go', re: /[^/\\]+_test\.go$/ },
+  { lang: 'java', re: /[^/\\]+Tests?\.java$/ },
+]
+
+function detectLangs(files) {
+  const langs = new Set()
+  for (const path of files) {
+    const ext = path.slice(path.lastIndexOf('.') + 1).toLowerCase()
+    const lang = LANG_BY_EXT.get(ext)
+    if (lang !== undefined) langs.add(lang)
+  }
+  return langs
+}
+
+/** 约定目录一个都不存在时，用「顶层有源码的目录」兜底，免得整仓扫不到东西却报缺失 */
+function inferRoots(files) {
+  const dirs = new Set()
+  for (const path of files) {
+    const top = path.split('/')[0]
+    if (top !== path && !['docs', 'public'].includes(top)) dirs.add(top)
+  }
+  return [...dirs].sort()
+}
+
 /** 优先用目标仓库自己的校验器；没有则退回 Skill 的 asset 副本（并据此判定该项缺失） */
 async function loadChecker(target, fileName) {
   const projectPath = join(target, 'scripts', fileName)
@@ -131,6 +172,9 @@ async function main() {
   const pkgText = readIf(join(target, 'package.json'))
   const pkg = pkgText === null ? null : JSON.parse(pkgText)
   const gitignore = readIf(join(target, '.gitignore'))
+  const sourceFiles = walk(target, (name) => LANG_BY_EXT.has(name.slice(name.lastIndexOf('.') + 1).toLowerCase()))
+  const langs = detectLangs(sourceFiles)
+  const langList = langs.size > 0 ? [...langs].sort().join(', ') : '无源码文件'
 
   // ---------- 文件级：约定的载体在不在 ----------
   if (agents === null) {
@@ -189,12 +233,16 @@ async function main() {
     const patterns = gitignore.split(/\r?\n/).map((line) => line.trim())
     // 容忍 `dist` 与 `dist/` 两种写法，别因为少一个斜杠就报缺失
     const covers = (name) => patterns.some((line) => line.replace(/\/+$/, '') === name)
-    for (const [needle, label] of [
-      ['node_modules', '依赖目录'],
-      ['dist', '构建产物'],
-    ]) {
-      if (covers(needle)) r.report('配置级', 'ok', `.gitignore 覆盖${label}`)
-      else r.report('配置级', 'missing', `.gitignore 未忽略${label}（${needle}/）`)
+    if (langs.has('node')) {
+      for (const [needle, label] of [
+        ['node_modules', '依赖目录'],
+        ['dist', '构建产物'],
+      ]) {
+        if (covers(needle)) r.report('配置级', 'ok', `.gitignore 覆盖${label}`)
+        else r.report('配置级', 'missing', `.gitignore 未忽略${label}（${needle}/）`)
+      }
+    } else {
+      r.report('配置级', 'info', `识别到的生态：${langList}——不是 Node 项目，跳过 node_modules/dist 检查（构建产物目录请按项目实际补进 .gitignore）`)
     }
     const coversRuntime = patterns.some((line) => /data\/$|server\/data\/$|\/data$/u.test(line))
     if (coversRuntime) r.report('配置级', 'ok', '.gitignore 覆盖运行时数据目录')
@@ -220,7 +268,7 @@ async function main() {
       }
     }
   } else {
-    r.report('配置级', 'info', '没有 package.json，跳过前端配置检查')
+    r.report('配置级', 'info', `没有 package.json，跳过 build/test/lint 脚本与 tsconfig 检查（识别到的生态：${langList}）`)
   }
 
   // ---------- 历史级：既有提交符不符合约定 ----------
@@ -243,9 +291,12 @@ async function main() {
 
   // ---------- 代码健康 ----------
   const loadedLines = await loadChecker(target, 'check-long-files.mjs')
-  const roots = ['src', 'server', 'shared', 'scripts'].filter((root) => existsSync(join(target, root)))
+  const fixedRoots = ['src', 'server', 'shared', 'scripts'].filter((root) => existsSync(join(target, root)))
+  const roots = fixedRoots.length > 0 ? fixedRoots : inferRoots(sourceFiles)
   if (roots.length === 0) r.report('代码健康', 'info', '没有可扫描的源码目录')
   else {
+    if (fixedRoots.length === 0) r.report('代码健康', 'info', `约定目录（src/server/shared/scripts）都不存在，改用顶层源码目录：${roots.join(', ')}`)
+    if (!langs.has('node')) r.report('代码健康', 'info', `行数阈值只覆盖 js/ts/vue/css 扩展名，${langList} 的文件不参与检查（需要门槛用 --limit <扩展名>=400 自行加）`)
     const { over, skipped } = loadedLines.mod.scanLongFiles(target, { roots, exclude: [] })
     if (over.length === 0) r.report('代码健康', 'ok', `${roots.join(', ')} 内无超长文件`)
     else {
@@ -259,12 +310,17 @@ async function main() {
     if (skipped > 0) r.report('代码健康', 'info', `有 ${skipped} 个文件命中豁免（豁免应写在检查脚本参数里，且必须可见）`)
   }
 
-  const tests = roots.length === 0 ? [] : walk(target, (name) => /\.(test|spec)\.[cm]?[jt]sx?$/.test(name))
-  if (tests.length === 0) r.report('代码健康', 'missing', '一个测试文件都没有——核心逻辑没有同目录测试')
-  else {
+  const shapes = TEST_SHAPES.filter((shape) => langs.has(shape.lang))
+  const tests = sourceFiles.filter((path) => shapes.some((shape) => shape.re.test(path)))
+  if (shapes.length === 0) {
+    r.report('代码健康', 'info', `没有为「${langList}」定义测试文件的命名形状，跳过测试文件检查（别把工具不认识当成项目缺失）`)
+  } else if (tests.length === 0) r.report('代码健康', 'missing', '一个测试文件都没有——核心逻辑没有同目录测试')
+  else if (!langs.has('node')) {
+    r.report('代码健康', 'ok', `${tests.length} 个测试文件（非 Node 生态，只报数量——「与被测文件同目录」是本项目约定的惯例，各语言习惯不同，不据此判缺失）`)
+  } else {
     const coLocated = tests.filter((path) => !path.includes('/__tests__/'))
     r.report('代码健康', 'ok', `${tests.length} 个测试文件（其中 ${coLocated.length} 个与被测文件同目录）`)
-    if (tests.length > 0 && coLocated.length === 0) {
+    if (langs.has('node') && coLocated.length === 0) {
       r.report('代码健康', 'warn', '测试全部集中在 __tests__，未遵循「与被测文件同目录」')
     }
   }
