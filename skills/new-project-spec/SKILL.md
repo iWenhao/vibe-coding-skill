@@ -1,5 +1,6 @@
 ---
 name: new-project-spec
+license: MIT
 description: 用一套从工业组态平台沉淀出的工程约定，快速新建项目或给已有项目补齐规范约束。两种模式——scaffold 生成带 AGENTS.md 骨架、提交信息机械拦截钩子、超长文件检查脚本、CHANGELOG/版本规则、文档地图与可选 Vue3+TypeScript+Vite+Pinia+Element Plus 技术栈配置的新仓库；audit 体检现有仓库缺了哪些约定并只补缺项。当用户说「新建一个项目/仓库」「按 scada-platform 那套规范来做」「写/更新一份 AGENTS.md」「约束提交信息、版本号、变更日志」「检查这个项目规不规范」「把这套约定搬到别的项目」时使用。
 when_to_use: 新项目起步需要工程约定，或已有仓库要补齐 AGENTS.md、提交钩子与收尾检查
 argument-hint: <新项目目录> | audit [已有项目目录]
