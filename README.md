@@ -88,6 +88,13 @@ npx skills add iWenhao/vibe-coding-skill -g -a claude-code -y
 
 > 规范只把 `name` 与 `description` 定为必填，`license`、`compatibility`、`metadata` 是可选字段——本技能带的 `license: MIT` 属于规范内，OpenCode 的官方文档明确会识别。真正超出规范的是 `when_to_use` 和 `argument-hint`——Claude Code 认，Grok Build 也认（它的键写作 kebab 的 `when-to-use`，另外还吃 `user-invocable`、`disable-model-invocation`），其余 agent 一律忽略（MiMo Code 与 OpenCode 对这点都写得很直白）。一个例外：走 claude.ai / API 的技能打包会对非规范键报错，命令行用法不受影响——若要上架那类市场，先删掉这两个扩展键。
 
+### 装完怎么用
+
+装好后在 agent 里说人话即可——技能正文开头有一张模式判断表，agent 读到它自己会选模式：
+
+- **新建**：「帮我新建一个项目，叫 `my-app`，是个内部工单看板，用 Vue3 栈、带个本地后端」→ 走 scaffold。四项输入（项目名 / 一句话描述 / 技术栈 / 要不要后端）缺了会**一次问齐**，不逐个追问。
+- **体检**：「给这个仓库上规范，缺什么补什么，别动我已有的约定」→ 走 audit。只补缺项、不覆盖既有约定，输出按四组给出 ✅ 已具备 / ⬜ 缺失 / ⚠️ 存在但不合规。
+
 ### 不装也能用
 
 技能正文只是操作手册，真正干活的是三个纯 Node 脚本。任何能执行 shell 的 agent（甚至纯手工）都可以直接跑：
