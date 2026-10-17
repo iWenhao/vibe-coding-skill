@@ -32,7 +32,12 @@ npx skills add iWenhao/new-project-spec          # 交互式勾选装给哪些 a
 npx skills add iWenhao/new-project-spec -g -a claude-code -y
 ```
 
-`npx skills` 是 Vercel Labs 的开放技能包管理器，支持 70+ 编码 agent，它会把 `skills/new-project-spec/` 整个目录放进各家 agent 的技能目录。
+`npx skills` 是 Vercel Labs 的开放技能包管理器，支持 70+ 编码 agent，它会把 `skills/new-project-spec/` 整个目录接进各家 agent 的技能目录。
+
+本机实测过的参数（`npx skills add --help`）：`-l/--list` 只预览不写盘、`-g` 用户级、`-a <agents>` 指定 agent（`*` 为全部）、`-s <skill>` 指定技能、`-y` 跳过提问、`--all` = `--skill '*' --agent '*' -y`。
+
+**Windows 建议加 `--copy`**：默认用符号链接把技能接进各家目录，非管理员/未开开发者模式的机器上可能建不出来；`--copy` 直接拷文件，代价是升级要重装。
+
 
 ### 手工放置
 
@@ -81,7 +86,7 @@ node skills/new-project-spec/scripts/scaffold.mjs --link-hooks D:/code/my-app
 
 ## 项目结构
 
-技能放在 `skills/<name>/` 子目录而不是仓库根，是因为 `npx skills` 与各家 plugin 市场按 `<目录>/SKILL.md` 发现技能；仓库根本身只放 README 与 LICENSE。
+技能放在 `skills/<name>/` 子目录而不是仓库根，是各家 plugin 市场与 `vercel-labs/agent-skills` 这类仓库的通用约定，便于按目录发现。`npx skills` 其实两种都认（根目录有 `SKILL.md` 时默认把仓库整体当一个技能，需要 `--full-depth` 才去翻子目录），但市场类分发按子目录放更稳。
 
 ```
 README.md
