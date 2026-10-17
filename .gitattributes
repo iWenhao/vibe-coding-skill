@@ -1,7 +1,9 @@
-# 统一行尾:入库一律 LF,避免每次提交都刷 "LF will be replaced by CRLF" 警告
+# 入库一律 LF（本机 core.autocrlf=true 时，其余文本文件检出成 CRLF 属正常，警告无害）
 * text=auto
 
-# 钩子由 git 直接 exec,首行 shebang 带 \r 会让 POSIX shell 报 bad interpreter
+# 钩子由 git 在 POSIX 上直接 exec，shebang 带 \r 会报 bad interpreter
 commit-msg text eol=lf
+
+# 这两类会被原样拷进生成的仓库，锁定 LF 让不同 OS 的克隆拿到同一份字节
 *.mjs text eol=lf
 *.tpl text eol=lf
