@@ -8,14 +8,13 @@ scaffold 用 `--stack vue-ts` 时生成的配置，每一项的**理由**写在�
 | --- | --- | --- |
 | `vue` + `typescript` + `vite` | 主体 | 类型检查交给 `vue-tsc`，构建交给 vite，两者分离 |
 | `pinia` | 跨组件状态 | 只放跨组件状态；单组件内的逻辑放 composable |
-| `vue-router` | 路由 | 三页面结构（列表 → 编辑 → 只读预览）是常见形态 |
+| `vue-router` | 路由 | 多页面分层（列表 → 详情 → 编辑）是常见形态 |
 | `element-plus` + `@element-plus/icons-vue` | 组件库与图标 | 图标在 `main.ts` 全局注册，SFC 里**不需要 import**（unplugin 也已配 resolver） |
 | `@vueuse/core` | 组合式工具 | 先查这里有没有现成的，再自己写 |
-| `konva` + `vue-konva` | 画布 | 可选——只在需要自由绘制/组态类界面时引入 |
 | `echarts` | 图表 | 可选 |
 | `sass` | 样式 | vite 配 `api: 'modern-compiler'`，避免旧 legacy API 告警 |
 
-画布/图表这类重依赖用 `manualChunks` 单独分包（见 `vite.config.ts` 模板），否则首屏 chunk 会把它们和 vue 打在一起。
+图表、渲染引擎这类重依赖用 `manualChunks` 单独分包（见 `vite.config.ts` 模板），否则首屏 chunk 会把它们和 vue 打在一起。
 
 ## pnpm 与构建脚本白名单
 
@@ -35,7 +34,7 @@ scaffold 用 `--stack vue-ts` 时生成的配置，每一项的**理由**写在�
 
 三条关掉的规则及理由（照抄前先确认适用）：
 
-- `@typescript-eslint/no-explicit-any: off`——画布/事件对象来自第三方库，逐个声明类型收益不大。
+- `@typescript-eslint/no-explicit-any: off`——大体积第三方库返回的事件与渲染对象逐个声明类型收益不大。
 - `no-undef: off`——TS 已由 `vue-tsc` 检查未定义标识符；ESLint 版不认识类型（如 `RequestInit`）会误报。
 - `vue/multi-word-component-names` / 格式类规则 off——格式交给编辑器与构建，别让 lint 报缩进。
 
@@ -53,7 +52,7 @@ scaffold 用 `--stack vue-ts` 时生成的配置，每一项的**理由**写在�
 
 ## 前端 + 可选零依赖后端（`--backend`）
 
-scada-platform 的形态值得复制：**前端是纯前端项目（构建产物可直接托管），后端是可选的存储服务，不在线时回落 localStorage**。
+这套形态值得复制：**前端是纯前端项目（构建产物可直接托管），后端是可选的存储服务，不在线时回落 localStorage**。
 
 - `server/*.mjs` 零依赖（只用 `node:` 内置模块），单文件起 HTTP 服务，数据落 `DATA_DIR` 下的 `*.json`。
 - 前端 `RemoteStorageAdapter` 通过 `/api/storage/*` 访问；启动时探测后端在线与否，不在线回落本地存储。**这个探测让「纯前端托管」和「带存储部署」两种形态共用一份代码**。
@@ -80,4 +79,4 @@ src/
 两条容易漏的：
 
 - **样式主题分层**：第三方组件库的暗色变量层（官方 `dark/css-vars.css` + `html.dark`，负责兜底）与项目品牌调色层（`dark-theme.scss`，限定在 `html.dark` 作用域）是**两层不同职责，不要合并**。清理样式时最容易把「看起来重复」的那层删掉。
-- **只读预览页要与编辑器的渲染逻辑保持一致**（着色 / 数值 / 图层可见性）。改编辑器渲染时必须检查预览页，否则线上表现和编辑时不一样。
+- **同一份内容有多种渲染形态时必须同步**（如列表页与详情页、编辑器与只读预览）。改其中一种渲染必须检查另一种，否则用户在不同入口看到的结果不一致。

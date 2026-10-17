@@ -14,7 +14,7 @@ import globals from 'globals'
  * 真正的信号反而看不见。理由见 AGENTS.md「验证节奏」。
  */
 const sharedRules = {
-  // 第三方库的事件/画布对象逐个声明类型收益不大
+  // 大体积第三方库返回的事件与渲染对象逐个声明类型收益不大
   '@typescript-eslint/no-explicit-any': 'off',
   // TS 已由 vue-tsc 检查未定义标识符；ESLint 的 no-undef 不认识类型（如 RequestInit）会误报
   'no-undef': 'off',
