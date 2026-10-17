@@ -19,27 +19,52 @@
 
 ## 快速开始
 
-把它作为 Skill 放进 Qoder 的技能目录后，直接用自然语言触发，例如「按这套规范新建一个项目」或「检查这个项目规不规范」。
-
-也可以手工调用脚本：
+### 一行装到本机所有 agent（推荐）
 
 ```bash
-# 生成新项目骨架
-node scripts/scaffold.mjs \
+npx skills add iWenhao/new-project-spec --list   # 先只预览，不写盘
+npx skills add iWenhao/new-project-spec          # 交互式勾选装给哪些 agent
+```
+
+装进指定 agent、跳过提问：
+
+```bash
+npx skills add iWenhao/new-project-spec -g -a claude-code -y
+```
+
+`npx skills` 是 Vercel Labs 的开放技能包管理器，支持 70+ 编码 agent，它会把 `skills/new-project-spec/` 整个目录放进各家 agent 的技能目录。
+
+### 手工放置
+
+任何认 [Agent Skills 规范](https://agentskills.io)的 agent，把 `skills/new-project-spec/` 整个目录（含 `SKILL.md`、`scripts/`、`references/`、`assets/`）放进下表位置即可：
+
+| Agent | 用户级 | 项目级（可随仓库提交） | 依据 |
+| --- | --- | --- | --- |
+| Claude Code | `~/.claude/skills/new-project-spec/` | `.claude/skills/new-project-spec/` | 官方文档实测口径 |
+| OpenAI Codex | `~/.agents/skills/new-project-spec/` | `.agents/skills/new-project-spec/` | 官方文档（另有 `/etc/codex/skills`） |
+| Cursor | `~/.cursor/skills/new-project-spec/` | `.cursor/skills/new-project-spec/` | 二手来源，未本机验证 |
+| Gemini CLI | `~/.gemini/skills/new-project-spec/` | — | 二手来源，未本机验证 |
+| Qoder | 随插件分发（`plugins/marketplaces/`），或直接把本仓库作为项目打开 | 同左 | 本机观察 |
+
+调用方式各家不同（Claude Code 自动匹配、Codex 用 `$new-project-spec` 或 `/skills`），但触发都靠 frontmatter 里的 `description`，无需额外配置。
+
+> frontmatter 里的 `when_to_use` 与 `argument-hint` 是 Qoder 用的扩展键；规范要求的是 `name` 与 `description`，不认识扩展键的 agent 直接忽略，不影响触发。
+
+### 不装也能用
+
+技能正文只是操作手册，真正干活的是三个纯 Node 脚本。任何能执行 shell 的 agent（甚至纯手工）都可以直接跑：
+
+```bash
+node skills/new-project-spec/scripts/scaffold.mjs \
   --target D:/code/my-app --name my-app --desc "内部工单看板" \
   --stack vue-ts --backend
 
-# 体检已有仓库（退出码 1 表示有缺失项）
-node scripts/audit.mjs /path/to/existing-repo
+node skills/new-project-spec/scripts/audit.mjs /path/to/existing-repo   # 体检，退出码 1 = 有缺失项
+node skills/new-project-spec/scripts/scaffold.mjs --link-hooks D:/code/my-app
 ```
 
-生成后单独启用提交钩子：
+生成后 `core.hooksPath` 是**每个克隆执行一次**的本地配置，无法随仓库提交——这一点会写进生成项目的 `AGENTS.md`。
 
-```bash
-node scripts/scaffold.mjs --link-hooks D:/code/my-app
-```
-
-`core.hooksPath` 是**每个克隆执行一次**的本地配置，无法随仓库提交——这一点会写进生成项目的 `AGENTS.md`。
 
 ## scaffold 参数
 
@@ -56,22 +81,28 @@ node scripts/scaffold.mjs --link-hooks D:/code/my-app
 
 ## 项目结构
 
+技能放在 `skills/<name>/` 子目录而不是仓库根，是因为 `npx skills` 与各家 plugin 市场按 `<目录>/SKILL.md` 发现技能；仓库根本身只放 README 与 LICENSE。
+
 ```
-SKILL.md                        Skill 入口：模式判断、操作步骤与关键取舍
-scripts/
-  scaffold.mjs                  生成骨架；--stack / --backend / --link-hooks
-  audit.mjs                     四组检查的体检清单，退出码反映是否有缺失
-assets/
-  *.tpl                         AGENTS.md / CHANGELOG / README / docs / gitignore 骨架模板
-  scripts/                      拷进新项目的钩子与校验脚本（提交信息、超长文件）
-  stack-vue-ts/                 Vue3 + TS + Vite + Pinia 配置模板与最小入口
-references/
-  conventions-kernel.md         栈无关约定内核全文
-  stack-vue-ts.md               技术栈落地细节与逐项配置理由
-  pitfalls.md                   「环境与已知坑」的写法规约与通用条目
+README.md
+LICENSE                             MIT
+skills/new-project-spec/            ← 一个完整的 Agent Skill，可整目录拷走
+  SKILL.md                          入口：模式判断、操作步骤与关键取舍
+  scripts/
+    scaffold.mjs                    生成骨架；--stack / --backend / --link-hooks
+    audit.mjs                       四组检查的体检清单，退出码反映是否有缺失
+  assets/
+    *.tpl                           AGENTS.md / CHANGELOG / README / docs / gitignore 骨架模板
+    scripts/                        拷进新项目的钩子与校验脚本（提交信息、超长文件）
+    stack-vue-ts/                   Vue3 + TS + Vite + Pinia 配置模板与最小入口
+  references/
+    conventions-kernel.md           栈无关约定内核全文
+    stack-vue-ts.md                 技术栈落地细节与逐项配置理由
+    pitfalls.md                     「环境与已知坑」的写法规约与通用条目
 ```
 
-`assets/` 只在 scaffold 时读取，无需预先加载进上下文；`references/` 按需展开，`SKILL.md` 只保留决策所需的主干。
+脚本用 `import.meta.url` 相对定位资源，所以整目录搬到任何路径、任何机器都能跑；`assets/` 只在 scaffold 时读取，无需预先加载进上下文，`references/` 按需展开——`SKILL.md` 只保留决策所需的主干，这正是渐进式披露（progressive disclosure）的省上下文做法。
+
 
 ## 约定内核
 
