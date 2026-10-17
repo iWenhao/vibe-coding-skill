@@ -2,7 +2,7 @@
 
 > 仓库名是 `vibe-coding-skill`,技能名仍是 `new-project-spec`(`skills/new-project-spec/`),两者不一致——安装命令用前者,`--skill` 与放置目录用后者。
 
-一个 Qoder Skill：把从工业组态平台项目沉淀出来的工程协作约定，变成可复制的产物——`AGENTS.md` 骨架 + 能机械拦截提交的脚本 + 文档地图 + 可选技术栈配置。
+一个符合 [Agent Skills 规范](https://agentskills.io)的 Skill：把工程协作约定变成可复制的产物——`AGENTS.md` 骨架 + 能机械拦截提交的脚本 + 文档地图 + 可选技术栈配置。
 
 约定的内核是**栈无关**的；技术栈只决定额外生成哪些配置文件。所有条目都遵循同一条原则：**能用脚本拦住的，绝不只写成文字规约**。
 
@@ -47,15 +47,15 @@ npx skills add iWenhao/vibe-coding-skill -g -a claude-code -y
 
 | Agent | 用户级 | 项目级（可随仓库提交） | 依据 |
 | --- | --- | --- | --- |
-| Claude Code | `~/.claude/skills/new-project-spec/` | `.claude/skills/new-project-spec/` | 官方文档实测口径 |
-| OpenAI Codex | `~/.agents/skills/new-project-spec/` | `.agents/skills/new-project-spec/` | 官方文档（另有 `/etc/codex/skills`） |
-| Cursor | `~/.cursor/skills/new-project-spec/` | `.cursor/skills/new-project-spec/` | 二手来源，未本机验证 |
-| Gemini CLI | `~/.gemini/skills/new-project-spec/` | — | 二手来源，未本机验证 |
-| Qoder | 随插件分发（`plugins/marketplaces/`），或直接把本仓库作为项目打开 | 同左 | 本机观察 |
+| Claude Code | `~/.claude/skills/new-project-spec/` | `.claude/skills/new-project-spec/` | 官方文档 |
+| OpenAI Codex | `~/.agents/skills/new-project-spec/` | `.agents/skills/new-project-spec/` | 官方文档（另有 `/etc/codex/skills` 管理级） |
+| Cursor | `~/.cursor/skills/new-project-spec/` | `.cursor/skills/new-project-spec/` | 官方文档（同时读 `.agents/skills/` 与 `~/.agents/skills/`） |
+| Gemini CLI | `~/.gemini/skills/new-project-spec/` | `.gemini/skills/new-project-spec/` | 官方文档（同时读 `.agents/skills/`；自动触发前要过审批） |
+| Qoder | `~/.qoder/skills/new-project-spec/` | `.qoder/skills/new-project-spec/` | 来自 `npx skills` 的 agent 清单（含 `qoder`/`qoder-cn`），非 Qoder 官方文档；随插件分发亦可 |
 
-调用方式各家不同（Claude Code 自动匹配、Codex 用 `$new-project-spec` 或 `/skills`），但触发都靠 frontmatter 里的 `description`，无需额外配置。
+调用方式各家不同：Claude Code 与 Cursor 是斜杠命令加自动匹配，Codex 用 `$new-project-spec` 或 `/skills`，Gemini CLI 自动触发前会先弹一次审批。共同点是都靠 frontmatter 的 `description` 匹配，不需要额外注册。
 
-> frontmatter 里的 `when_to_use` 与 `argument-hint` 是 Qoder 用的扩展键；规范要求的是 `name` 与 `description`，不认识扩展键的 agent 直接忽略，不影响触发。
+> 规范只要求 `name` 与 `description`。本技能 frontmatter 另带的 `license`、`when_to_use`、`argument-hint` 里，`when_to_use` 是 Claude Code 认的字段，其余会被忽略。一个例外：走 claude.ai / API 的技能打包会对非规范键报错，命令行用法不受影响——若要上架那类市场，先删掉这三个扩展键。
 
 ### 不装也能用
 
@@ -88,7 +88,7 @@ node skills/new-project-spec/scripts/scaffold.mjs --link-hooks D:/code/my-app
 
 ## 项目结构
 
-技能放在 `skills/<name>/` 子目录而不是仓库根，是各家 plugin 市场与 `vercel-labs/agent-skills` 这类仓库的通用约定，便于按目录发现。`npx skills` 其实两种都认（根目录有 `SKILL.md` 时默认把仓库整体当一个技能，需要 `--full-depth` 才去翻子目录），但市场类分发按子目录放更稳。
+技能放在 `skills/<name>/` 子目录而不是仓库根，是各家 plugin 市场与 `vercel-labs/agent-skills` 这类仓库的通用约定，便于按目录发现。`npx skills` 默认就认这个位置——它会沿容器目录向下找 `SKILL.md`（约三层），根目录直接放 `SKILL.md` 则把整个仓库当一个技能。`--full-depth` 不是拿来翻 `skills/` 子目录的，它是给 `examples/`、`tests/` 这类非容器目录用的。
 
 ```
 README.md
