@@ -1,0 +1,7 @@
+# 统一行尾:入库一律 LF,避免每次提交都刷 "LF will be replaced by CRLF" 警告
+* text=auto
+
+# 钩子由 git 直接 exec,首行 shebang 带 \r 会让 POSIX shell 报 bad interpreter
+commit-msg text eol=lf
+*.mjs text eol=lf
+*.tpl text eol=lf
