@@ -1,5 +1,7 @@
 # new-project-spec
 
+> 仓库名是 `vibe-coding-skill`,技能名仍是 `new-project-spec`(`skills/new-project-spec/`),两者不一致——安装命令用前者,`--skill` 与放置目录用后者。
+
 一个 Qoder Skill：把从工业组态平台项目沉淀出来的工程协作约定，变成可复制的产物——`AGENTS.md` 骨架 + 能机械拦截提交的脚本 + 文档地图 + 可选技术栈配置。
 
 约定的内核是**栈无关**的；技术栈只决定额外生成哪些配置文件。所有条目都遵循同一条原则：**能用脚本拦住的，绝不只写成文字规约**。
@@ -22,14 +24,14 @@
 ### 一行装到本机所有 agent（推荐）
 
 ```bash
-npx skills add iWenhao/new-project-spec --list   # 先只预览，不写盘
-npx skills add iWenhao/new-project-spec          # 交互式勾选装给哪些 agent
+npx skills add iWenhao/vibe-coding-skill --list   # 先只预览，不写盘
+npx skills add iWenhao/vibe-coding-skill          # 交互式勾选装给哪些 agent
 ```
 
 装进指定 agent、跳过提问：
 
 ```bash
-npx skills add iWenhao/new-project-spec -g -a claude-code -y
+npx skills add iWenhao/vibe-coding-skill -g -a claude-code -y
 ```
 
 `npx skills` 是 Vercel Labs 的开放技能包管理器，支持 70+ 编码 agent，它会把 `skills/new-project-spec/` 整个目录接进各家 agent 的技能目录。
