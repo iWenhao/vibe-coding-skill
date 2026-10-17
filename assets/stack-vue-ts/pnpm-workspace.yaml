@@ -1,0 +1,6 @@
+# pnpm 10/11 会拦截依赖的构建脚本，这份白名单是必需的——删掉表现为装完跑不起来。
+# 新增依赖若需要 postinstall 编译（原生二进制、esbuild 类），在这里补一项，不要全局放开。
+allowBuilds:
+  '@parcel/watcher': true
+  esbuild: true
+  vue-demi: true

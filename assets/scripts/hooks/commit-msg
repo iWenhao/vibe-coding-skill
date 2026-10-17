@@ -1,0 +1,25 @@
+#!/bin/sh
+# Git commit-msg 钩子：调用 scripts/commit-msg-check.mjs 校验提交信息。
+#
+# 启用（每个克隆执行一次）：git config core.hooksPath scripts/hooks
+# 临时绕过：git commit --no-verify
+#
+# 为什么只做转发、逻辑放在 Node 脚本里：标题长度按「字符」计（一个汉字算 1），
+# 而 shell 的字符串长度与 wc -c 在 UTF-8 下按字节算，中文标题会被算成 3 倍而全部误判。
+# 本文件按自身路径定位校验脚本（不依赖仓库根位置），故 core.hooksPath 填相对或绝对路径都能工作。
+set -u
+
+hook_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit 0
+checker="$hook_dir/../commit-msg-check.mjs"
+
+if [ ! -f "$checker" ]; then
+  echo "[commit-msg] 未找到 $checker，跳过提交信息校验" >&2
+  exit 0
+fi
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "[commit-msg] 未找到 node，跳过提交信息校验" >&2
+  exit 0
+fi
+
+exec node "$checker" "${1:-}"
