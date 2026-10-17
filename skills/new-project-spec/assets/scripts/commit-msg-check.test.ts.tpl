@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { MAX_SUBJECT_LENGTH, PREFIXES, checkCommitMessage } from './commit-msg-check.mjs'
+import { MAX_SUBJECT_LENGTH, PREFIXES, checkCommitMessage, checkDocSync } from './commit-msg-check.mjs'
 
 // 工具脚本也要有同目录测试——这条规则本身就是 AGENTS.md 的约定之一。
 // 校验器是最不该「改了没人测」的代码：它错了，全仓库的提交历史就跟着错。
@@ -43,5 +43,43 @@ describe('checkCommitMessage', () => {
 
   it('空标题判为不合规', () => {
     expect(checkCommitMessage('\n\n  \n').ok).toBe(false)
+  })
+})
+
+describe('checkDocSync', () => {
+  it('非重要文件改动不拦', () => {
+    const result = checkDocSync(['src/main.ts', 'docs/USER_GUIDE.md'], '优化: 调整入口逻辑')
+    expect(result.blocked).toBe(false)
+    expect(result.notices).toHaveLength(0)
+  })
+
+  it('重要文件改动而 README 未同步时拒绝，并列出命中文件与豁免出口', () => {
+    const result = checkDocSync(['src/main.ts', 'package.json'], '优化: 调整构建脚本')
+    expect(result.blocked).toBe(true)
+    expect(result.reason).toContain('package.json')
+    expect(result.reason).toContain('[skip-docs]')
+  })
+
+  it('README.md 一并暂存即通过', () => {
+    expect(checkDocSync(['package.json', 'README.md'], '优化: 调整构建脚本').blocked).toBe(false)
+  })
+
+  it('正文含豁免标记时放行并给出可见提示', () => {
+    const result = checkDocSync(['package.json'], '优化: 调整构建脚本\n\n[skip-docs]')
+    expect(result.blocked).toBe(false)
+    expect(result.notices[0]).toContain('[skip-docs]')
+  })
+
+  it('根目录配置文件按正则命中，嵌套路径不误伤', () => {
+    expect(checkDocSync(['vite.config.ts'], '优化: 换构建配置').blocked).toBe(true)
+    expect(checkDocSync(['src/inner.config.ts'], '优化: 内部配置').blocked).toBe(false)
+    // monorepo 的子包 package.json 默认不在清单内，需要时自行往 DOC_SYNC_PATTERNS 加条目
+    expect(checkDocSync(['packages/app/package.json'], '优化: 子包依赖').blocked).toBe(false)
+  })
+
+  it('取不到暂存区清单时降级为提示而不是拦死', () => {
+    const result = checkDocSync(null, '优化: 调整构建脚本')
+    expect(result.blocked).toBe(false)
+    expect(result.notices).toHaveLength(1)
   })
 })

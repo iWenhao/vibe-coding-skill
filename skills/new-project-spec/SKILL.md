@@ -68,6 +68,8 @@ node <target>/scripts/commit-msg-check.mjs ../msg-probe.txt; echo "exit=$?"
 
 期望 `exit=1` 并报「标题 33 字符，超出上限 30 字符」（这条是实测过的，正好命中超长分支——顺带写带前缀但不超长的样例只会命中「未知前缀」，测不到长度那道）。验证完删掉 `msg-probe.txt`。绿灯不代表脚本正确，**红灯才代表**。
 
+文档同步拦截同法验证：在仓库里改一行 `package.json` 并 `git add`（不动 README），跑 `node <target>/scripts/commit-msg-check.mjs <合法信息文件>`，期望 `exit=1` 且报「重要文件改动但 README.md 未同步」；再往信息文件加一行 `[skip-docs]` 重跑，期望 `exit=0`。两条都红绿分明才算装好。
+
 ## 模式二：给已有项目上规范
 
 **第 1 步——体检**：
@@ -96,7 +98,7 @@ node <skill-dir>/scripts/audit.mjs [目标目录，默认当前]
 1. **常用命令**——只列命令，门槛指向「验证节奏」，两处不重复。
 2. **环境与已知坑**——仓库属性 vs `〔本机〕` 分开标注，换机器不照搬。
 3. **任务清单与进度可见性**——多步任务必须有对用户可见的清单，开工与收尾各附一份。
-4. **工作流约定**——分支模型、一个功能一个提交、提交信息前缀白名单 + 标题 ≤30 **字符**（汉字算 1）、细节写 CHANGELOG、版本号只在明确发版时动。
+4. **工作流约定**——分支模型、一个功能一个提交、提交信息前缀白名单 + 标题 ≤30 **字符**（汉字算 1）、细节写 CHANGELOG、重要文件改动同轮同步 README（钩子拦截）、版本号只在明确发版时动。
 5. **代码风格**——注释中文且只说「为什么」；先找现成的、**三次必收敛**；超阈值必拆。
 6. **验证节奏**——按改动范围分级的表格，含「用户可见输出必须真跑一次」这条优先级最高的例外。
 7. **测试**——单测放被测文件同目录；核心逻辑补测，UI 不强求但改 UI 要浏览器实测。
@@ -107,7 +109,7 @@ node <skill-dir>/scripts/audit.mjs [目标目录，默认当前]
 
 生成或补齐前先照这几条判断，别机械照搬源仓库：
 
-- **机械拦截优先**：提交信息与文件行数都做成脚本 + 钩子，文字约定只解释「为什么」。检查脚本存在但没接钩子 = 约定没生效（audit 的「执行级」专查这个）。
+- **机械拦截优先**：提交信息、README 同步与文件行数都做成脚本 + 钩子，文字约定只解释「为什么」。检查脚本存在但没接钩子 = 约定没生效（audit 的「执行级」专查这个）。
 - **Windows 坑用 Node 替 PowerShell**：本 Skill 的行数检查是 `check-long-files.mjs`，不是原仓库的 `.ps1`。理由：不依赖 PS 5.1 的 ANSI 代码页（`.ps1` 无 BOM 会 ParserError）、CI 与非 Windows agent 可跑、计行与行尾风格无关。
 - **不生成领域代码**：本 Skill 只造「规范 + 骨架」。渲染引擎、图形元素注册、数据源适配器这类业务实现属于源仓库自身，别往新项目里塞。
 - **工具认不出的生态要跳过，不是报缺失**：`audit` 先探测仓库语言再决定哪些检查适用——把「工具不认识这门语言」写成「这个项目缺东西」会让退出码 1 失去意义，也会误导用户去补不存在的问题。行数阈值同理只覆盖 js/ts/vue/css。
@@ -116,11 +118,11 @@ node <skill-dir>/scripts/audit.mjs [目标目录，默认当前]
 
 ## Resources
 
-- [references/conventions-kernel.md](references/conventions-kernel.md)——栈无关约定内核全文（提交/版本/CHANGELOG/防重复/拆分/进度清单/验证分级/测试）。
+- [references/conventions-kernel.md](references/conventions-kernel.md)——栈无关约定内核全文（提交/README 同步/版本/CHANGELOG/防重复/拆分/进度清单/验证分级/测试）。
 - [references/stack-vue-ts.md](references/stack-vue-ts.md)——Vue3 + TS + Vite + Pinia 落地细节与配置逐项理由。
 - [references/pitfalls.md](references/pitfalls.md)——「环境与已知坑」一节的写法规约与通用条目。
 - `scripts/scaffold.mjs`——生成骨架，支持 `--stack vue-ts|none`、`--backend`、`--link-hooks`。
 - `scripts/audit.mjs`——四组检查的体检清单，退出码反映是否有缺失。
 - `scripts/check-long-files.mjs`——跨平台行数阈值检查（被 audit 复用，单一来源）。
-- `scripts/commit-msg-check.mjs`——提交信息校验纯函数 + CLI，前缀白名单与长度在文件头常量。
+- `scripts/commit-msg-check.mjs`——提交信息校验 + 文档同步检查（纯函数 + CLI），前缀白名单、长度与 `DOC_SYNC_PATTERNS` 在文件头常量。
 - `assets/`——`AGENTS.md.tpl` 等骨架模板与 `stack-vue-ts/` 配置模板；只在 scaffold 时读取，不必预先加载进上下文。

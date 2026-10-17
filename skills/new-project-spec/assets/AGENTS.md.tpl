@@ -80,6 +80,9 @@ pnpm lint               # ESLint
   - 由 `scripts/hooks/commit-msg` 机械拦截（超长或未知前缀直接拒绝提交），每个克隆启用一次：`git config core.hooksPath scripts/hooks`；确需绕过用 `git commit --no-verify`。
 - **变更日志**：功能与修复类提交需同步更新 `CHANGELOG.md` 的 `[Unreleased]` 区。详略分工：提交标题给「改了什么」，CHANGELOG 给「为什么这么改、动了哪些文件、实测了什么」——同一件事实不在两处各写一遍。
   - 条目写法：**动因**（谁提出、原来哪里别扭，用户视角）+ **做法**（关键设计与为什么这样取舍，尤其「为什么不是另一种实现」）+ **实测**（新增几个用例、跑了哪些检查、全量数字）。
+- **README 同步**：改了决定 README 内容的文件——`package.json`、根目录 `*.config.*`、`tsconfig*`、`.env.example`、`pnpm-workspace.yaml`（默认清单见 `scripts/commit-msg-check.mjs` 的 `DOC_SYNC_PATTERNS`，按项目实际增删）——**同轮**更新 README 的「环境要求 / 快速开始 / 常用命令」对应段落，别攒到最后。
+  - 钩子会拒绝「重要文件动了而 README.md 没进暂存区」的提交；确无需同步时提交正文单独一行 `[skip-docs]`（豁免随提交入库、可 grep），或 `git commit --no-verify`。
+  - `src/**` 等内部改动不在清单里，README 是否受影响自己判断，拿不准就对照看一眼对应段落。
 - **版本号**：从 `0.0.1` 起步，末位每次 +1，满 10 进位（0.0.9 → 0.0.10 → 0.1.0）。发版时版本号后附当天日期 YYMMDD（如 `0.0.2-260928`，CHANGELOG 标题与 tag 使用）；`package.json` 保留三段数字并同步修改。
 - **发版时机**：版本号只在用户明确说「发版」时才更新（改 `package.json` + 把 CHANGELOG 的 `[Unreleased]` 定稿为新版本号）。**平时提交一律不动版本号**，新内容只写入 `[Unreleased]`。
 - **不提交**：`node_modules/`、构建产物、诊断用的临时代码。以下几类最容易在 `git add -A` 时被顺手带进来，提交前扫一眼暂存区：运行时数据目录{{#BACKEND}}（`server/data/`）{{/BACKEND}}、agent 本地配置目录（`.workbuddy/`、`.zcodeignore` 等）、设计沙箱的临时构建产物。

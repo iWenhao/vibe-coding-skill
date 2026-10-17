@@ -213,6 +213,19 @@ async function main() {
   else if (checker === null) r.report('执行级', 'missing', '钩子存在但缺 scripts/commit-msg-check.mjs，钩子会静默跳过校验')
   else r.report('执行级', 'ok', 'commit-msg 钩子与校验脚本齐备')
 
+  // 文档同步拦截是后加的能力：旧版校验脚本没有 checkDocSync 导出，报 warn 引导重拷升级
+  if (checker !== null) {
+    let hasDocSync = false
+    try {
+      const mod = await import(pathToFileURL(join(target, 'scripts', 'commit-msg-check.mjs')).href)
+      hasDocSync = typeof mod.checkDocSync === 'function'
+    } catch {
+      /* 项目脚本损坏：历史级会经 loadChecker 兜底报告，这里不重复报 */
+    }
+    if (hasDocSync) r.report('执行级', 'ok', '文档同步拦截已内置（checkDocSync：重要文件改动需同步 README）')
+    else r.report('执行级', 'warn', 'commit-msg-check.mjs 缺 checkDocSync（旧版本）——重要文件改动不会拦 README 未同步，从 Skill 的 assets/scripts/ 重拷可升级')
+  }
+
   const inRepo = isGitRepo(target)
   if (!inRepo) {
     r.report('执行级', 'missing', `${target} 不是 git 仓库——钩子与提交历史无从生效（先 git init）`)
