@@ -29,6 +29,18 @@ const REQUIRED_AGENT_SECTIONS = [
   '测试',
 ]
 
+/**
+ * AGENTS.md 的体积预算，单位**字节**：Codex 的 `project_doc_max_bytes` 默认 32 * 1024，
+ * 算的是「项目根 → 当前工作目录」这条链上所有 AGENTS.md **合并后的总量**，
+ * 一旦拼到上限就停止继续加载更靠近工作目录的那份——不是把尾部字节裁掉。
+ *
+ * 为什么按字节而不是行数：中文在 UTF-8 里一个字占 3 字节，同样 200 行，
+ * 中文仓库的真实体积是英文仓库的近三倍。按行数出的结论会系统性偏松。
+ * （用户级 `~/.codex/AGENTS.md` 与这份预算共享，但它在仓库外，本脚本看不到，
+ * 所以这里只报「仓库内可见的量」，不据此判缺失——假缺失会污染退出码 1。）
+ */
+const AGENT_DOC_BUDGET_BYTES = 32 * 1024
+
 /** status: ok=✅ missing=⬜ warn=⚠️ info=· */
 function makeReporter() {
   const rows = []
@@ -180,7 +192,17 @@ async function main() {
   if (agents === null) {
     r.report('文件级', 'missing', 'AGENTS.md 不存在——代理与新人都没有工作指南')
   } else {
-    r.report('文件级', 'ok', `AGENTS.md（${agents.split(/\r?\n/).length} 行）`)
+    const agentLines = agents.split(/\r?\n/).length
+    const agentBytes = Buffer.byteLength(agents, 'utf8')
+    const agentPct = Math.round((agentBytes * 100) / AGENT_DOC_BUDGET_BYTES)
+    const sizeText = `AGENTS.md（${agentLines} 行、${agentBytes} 字节，占 Codex 默认合并预算 ${agentPct}%）`
+    if (agentBytes > AGENT_DOC_BUDGET_BYTES) {
+      r.report('文件级', 'missing', `AGENTS.md 单文件 ${agentBytes} 字节，已超 ${AGENT_DOC_BUDGET_BYTES} 字节预算——往里加内容会把更靠近工作目录的 AGENTS.md 整份挤出加载范围，先精简或拆进 docs/`)
+    } else if (agentBytes * 4 > AGENT_DOC_BUDGET_BYTES * 3) {
+      r.report('文件级', 'warn', `${sizeText}——逼近预算。加条目前先自问「agent 读代码能不能自己推出来」，能推就删；只在特定轮次用的细则挪到 docs/ 并在此写明何时必读`)
+    } else {
+      r.report('文件级', 'ok', sizeText)
+    }
     for (const section of REQUIRED_AGENT_SECTIONS) {
       if (!agents.includes(section)) {
         r.report('文件级', 'missing', `AGENTS.md 缺「${section}」章节`)
@@ -191,6 +213,13 @@ async function main() {
       r.report('文件级', 'warn', `AGENTS.md 有 ${todo} 处【待填】未补（尤其「架构与扩展点」「环境与已知坑」必须人工写）`)
     }
     if (/\{\{[#^A-Z]/.test(agents)) r.report('文件级', 'warn', 'AGENTS.md 残留模板占位符 {{...}}')
+
+    // 预算是逐层相加的：子目录里的 AGENTS.md 同样占这份额度（同目录的 override 与 AGENTS.md 只会加载一份，故这里是上限）
+    const agentDocs = walk(target, (name) => name === 'AGENTS.md' || name === 'AGENTS.override.md')
+    if (agentDocs.length > 1) {
+      const totalBytes = agentDocs.reduce((sum, rel) => sum + Buffer.byteLength(readFileSync(join(target, rel), 'utf8'), 'utf8'), 0)
+      r.report('文件级', 'info', `仓库内共 ${agentDocs.length} 份 AGENTS.md，合计上限 ${totalBytes} 字节——预算是根到工作目录逐层累加的，子目录那份也占额度`)
+    }
   }
 
   const changelog = readIf(join(target, 'CHANGELOG.md'))
