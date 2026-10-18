@@ -7,8 +7,9 @@
  *
  * 用法（在仓库根目录执行）：
  *   node scripts/check-long-files.mjs
- *   node scripts/check-long-files.mjs --roots src,server --exclude "src/industrial/*" --limit vue=500
+ *   node scripts/check-long-files.mjs --roots src,server --exclude "src/icons/*" --limit vue=500
  *   node scripts/check-long-files.mjs --json          # 给 CI/工具消费
+ *   （`--名字 值` 与 `--名字=值` 两种写法等价；`--名字` 后面没跟值会告警并忽略该参数）
  *
  * 为什么是 Node 而不是 PowerShell：
  *   1. 跨平台——CI 与非 Windows 的 agent 也能跑同一条命令；
@@ -140,9 +141,18 @@ const invokedDirectly =
 
 if (invokedDirectly) {
   const argv = process.argv.slice(2)
+  /** `--名字=值` 与 `--名字 值` 两种写法都吃，与 scaffold.mjs 的空格风格保持一致 */
   const readFlag = (name) => {
-    const hit = argv.find((item) => item.startsWith(`--${name}=`))
-    return hit === undefined ? undefined : hit.slice(name.length + 3)
+    const inline = argv.find((item) => item.startsWith(`--${name}=`))
+    if (inline !== undefined) return inline.slice(name.length + 3)
+    const index = argv.indexOf(`--${name}`)
+    if (index === -1) return undefined
+    const value = argv[index + 1]
+    if (value === undefined || value.startsWith('--')) {
+      console.error(`⚠️ --${name} 后面没取到值，本次忽略该参数`)
+      return undefined
+    }
+    return value
   }
 
   const rootsRaw = readFlag('roots')

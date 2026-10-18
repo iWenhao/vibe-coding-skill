@@ -144,7 +144,7 @@
 
 ```bash
 node scripts/check-long-files.mjs          # 默认扫约定目录，超限则退出码 1
-node scripts/check-long-files.mjs --roots src,server --exclude "src/industrial/*"
+node scripts/check-long-files.mjs --roots src,server --exclude "src/icons/*"
 ```
 
 计行必须与行尾风格无关（仓库内 CRLF/LF 混用是常态）：读全文后按 `/\r?\n/` 切、丢掉末尾空元素。踩过的坑：`(Get-Content | Measure-Object -Line).Lines` 不计空行、对纯 LF 文件漏得更多，会让接近阈值的文件静默通过。
