@@ -1,6 +1,6 @@
-# new-project-spec
+# project-spec
 
-> 仓库名是 `vibe-coding-skill`,技能名仍是 `new-project-spec`(`skills/new-project-spec/`),两者不一致——安装命令用前者,`--skill` 与放置目录用后者。
+> 仓库名是 `vibe-coding-skill`,技能名是 `project-spec`(`skills/project-spec/`,显示名 Project Spec),两者不一致——安装命令用前者,`--skill` 与放置目录用后者。技能名原为 `new-project-spec`,因它还带着 audit 模式（给已有仓库上规范）而改掉：**装过的机器上旧名副本不会自己消失**，重装前先删掉各家目录里的 `skills/new-project-spec/`，否则两份并存；旧的安装命令 `--skill new-project-spec` 也已失效。
 
 一个符合 [Agent Skills 规范](https://agentskills.io)的 Skill：把工程协作约定变成可复制的产物——`AGENTS.md` 骨架 + 能机械拦截提交的脚本 + 文档地图 + 可选技术栈配置。
 
@@ -35,7 +35,7 @@ npx skills add iWenhao/vibe-coding-skill          # 交互式勾选装给哪些 
 npx skills add iWenhao/vibe-coding-skill -g -a claude-code -y
 ```
 
-`npx skills` 是 Vercel Labs 的开放技能包管理器，支持 70+ 编码 agent，它会把 `skills/new-project-spec/` 整个目录接进各家 agent 的技能目录。
+`npx skills` 是 Vercel Labs 的开放技能包管理器，支持 70+ 编码 agent，它会把 `skills/project-spec/` 整个目录接进各家 agent 的技能目录。
 
 本机实测过的参数（`npx skills add --help`）：`-l/--list` 只预览不写盘、`-g` 用户级、`-a <agents>` 指定 agent（`*` 为全部）、`-s <skill>` 指定技能、`-y` 跳过提问、`--all` = `--skill '*' --agent '*' -y`。
 
@@ -44,16 +44,16 @@ npx skills add iWenhao/vibe-coding-skill -g -a claude-code -y
 
 ### 手工放置
 
-任何认 [Agent Skills 规范](https://agentskills.io)的 agent，把 `skills/new-project-spec/` 整个目录（含 `SKILL.md`、`scripts/`、`references/`、`assets/`）放进它的技能目录即可。
+任何认 [Agent Skills 规范](https://agentskills.io)的 agent，把 `skills/project-spec/` 整个目录（含 `SKILL.md`、`scripts/`、`references/`、`assets/`）放进它的技能目录即可。
 
-**只记一条也够用：`.agents/skills/new-project-spec/`（用户级 `~/.agents/skills/new-project-spec/`）。** 这个共用目录被 Codex、Cursor、Gemini CLI、OpenCode、Pi、Grok Build、Muse Code、DeepSeek Harness、MiMo Code、Antigravity、Kimi Code、Trae 十二家的官方文档确认会扫——一处放置，十二家通吃（Trae 要先打开开关，见下表）。
+**只记一条也够用：`.agents/skills/project-spec/`（用户级 `~/.agents/skills/project-spec/`）。** 这个共用目录被 Codex、Cursor、Gemini CLI、OpenCode、Pi、Grok Build、Muse Code、DeepSeek Harness、MiMo Code、Antigravity、Kimi Code、Trae 十二家的官方文档确认会扫——一处放置，十二家通吃（Trae 要先打开开关，见下表）。
 
 官方文档确认（可直接依赖）：
 
 | Agent | 项目级 | 用户级 | 备注 |
 | --- | --- | --- | --- |
-| Claude Code | `.claude/skills/new-project-spec/` | `~/.claude/skills/new-project-spec/` | 斜杠命令与自动匹配两种都有 |
-| OpenAI Codex | `.agents/skills/…` | `~/.agents/skills/…` | 另有管理级 `/etc/codex/skills`；用 `$new-project-spec` 或 `/skills` |
+| Claude Code | `.claude/skills/project-spec/` | `~/.claude/skills/project-spec/` | 斜杠命令与自动匹配两种都有 |
+| OpenAI Codex | `.agents/skills/…` | `~/.agents/skills/…` | 另有管理级 `/etc/codex/skills`；用 `$project-spec` 或 `/skills` |
 | Cursor | `.cursor/skills/…` 或 `.agents/skills/…` | `~/.cursor/skills/…` 或 `~/.agents/skills/…` | `/` 调用，或钉成 Custom Mode |
 | Gemini CLI | `.gemini/skills/…` 或 `.agents/skills/…` | `~/.gemini/skills/…` 或 `~/.agents/skills/…` | 自动触发前会先弹一次审批 |
 | OpenCode | `.opencode/skills/…`，另认 `.claude/skills/…`、`.agents/skills/…` | `~/.config/opencode/skills/…`，另认 `~/.claude/skills/…`、`~/.agents/skills/…` | 项目级从当前目录向上遍历到 git worktree 根；frontmatter 只识别 `name`/`description`/`license`/`compatibility`/`metadata`，未知字段忽略；`name` 必须与所在文件夹名一致 |
@@ -71,7 +71,7 @@ npx skills add iWenhao/vibe-coding-skill -g -a claude-code -y
 | ZCode（智谱） | `.zcode/skills/…` | `~/.zcode/skills/…` | — |
 | 千问办公（阿里） | 官方未公布项目级目录 | `~/.qwenworkcn/skills/…` | 官方文档原话：技能是「包含 `SKILL.md` 的文件夹，存放于 `~/.qwenworkcn/skills/`」且「可直接在文件系统中增删和编辑」；另有对话安装（把仓库地址发给它）、技能广场、界面上传三条路。它把技能当跨会话的全局资产，不跟仓库走 |
 
-（表中 `…` 一律代表 `new-project-spec`。）
+（表中 `…` 一律代表 `project-spec`。）
 
 只有二手口径，或厂商只承认「有技能能力」、没公布目录（路径取自 `npx skills` 的 `src/agents.ts` 或社区实测，**不等于厂商承诺**）：
 
@@ -85,7 +85,7 @@ npx skills add iWenhao/vibe-coding-skill -g -a claude-code -y
 
 > 表里没有不等于不存在：`npx skills` 的清单只是安装器支持的 target，厂商自己支持什么以其文档为准；反过来，一个品牌下往往同时有消费版、企业版和 CLI 好几个产品，官方给某个版本写明的目录，不能直接算到别的版本头上（WorkBuddy 就是例子——Enterprise 版有官方目录，桌面消费版仍只有界面上传那条路）。
 
-调用方式各家不同：Claude Code 与 Cursor 是斜杠命令加自动匹配，Codex 用 `$new-project-spec` 或 `/skills`，Gemini CLI 自动触发前会先弹一次审批。共同点是都靠 frontmatter 的 `description` 匹配，不需要额外注册。
+调用方式各家不同：Claude Code 与 Cursor 是斜杠命令加自动匹配，Codex 用 `$project-spec` 或 `/skills`，Gemini CLI 自动触发前会先弹一次审批。共同点是都靠 frontmatter 的 `description` 匹配，不需要额外注册。
 
 > 规范只把 `name` 与 `description` 定为必填，`license`、`compatibility`、`metadata` 是可选字段——本技能带的 `license: MIT` 属于规范内，OpenCode 的官方文档明确会识别。真正超出规范的是 `when_to_use` 和 `argument-hint`——Claude Code 认，Grok Build 也认（它的键写作 kebab 的 `when-to-use`，另外还吃 `user-invocable`、`disable-model-invocation`），其余 agent 一律忽略（MiMo Code 与 OpenCode 对这点都写得很直白）。一个例外：走 claude.ai / API 的技能打包会对非规范键报错，命令行用法不受影响——若要上架那类市场，先删掉这两个扩展键。
 
@@ -101,12 +101,12 @@ npx skills add iWenhao/vibe-coding-skill -g -a claude-code -y
 技能正文只是操作手册，真正干活的是三个纯 Node 脚本。任何能执行 shell 的 agent（甚至纯手工）都可以直接跑：
 
 ```bash
-node skills/new-project-spec/scripts/scaffold.mjs \
+node skills/project-spec/scripts/scaffold.mjs \
   --target D:/code/my-app --name my-app --desc "内部工单看板" \
   --stack vue-ts --backend
 
-node skills/new-project-spec/scripts/audit.mjs /path/to/existing-repo   # 体检，退出码 1 = 有缺失项
-node skills/new-project-spec/scripts/scaffold.mjs --link-hooks D:/code/my-app
+node skills/project-spec/scripts/audit.mjs /path/to/existing-repo   # 体检，退出码 1 = 有缺失项
+node skills/project-spec/scripts/scaffold.mjs --link-hooks D:/code/my-app
 ```
 
 生成后 `core.hooksPath` 是**每个克隆执行一次**的本地配置，无法随仓库提交——这一点会写进生成项目的 `AGENTS.md`。
@@ -127,12 +127,12 @@ node skills/new-project-spec/scripts/scaffold.mjs --link-hooks D:/code/my-app
 
 ## 项目结构
 
-技能放在 `skills/<name>/` 子目录而不是仓库根，是各家 plugin 市场与 `vercel-labs/agent-skills` 这类仓库的通用约定，便于按目录发现；各家 agent 与 `npx skills` 认的都是这个形状。注意各家扫 `SKILL.md` 的深度不一样（见上表 DeepSeek Harness 那行：只扫直属层），而安装器把技能摊平成 `<agent>/skills/new-project-spec/` 后正好每家都满足——这也是为什么手工放置时同样别把整个仓库塞进技能目录。
+技能放在 `skills/<name>/` 子目录而不是仓库根，是各家 plugin 市场与 `vercel-labs/agent-skills` 这类仓库的通用约定，便于按目录发现；各家 agent 与 `npx skills` 认的都是这个形状。注意各家扫 `SKILL.md` 的深度不一样（见上表 DeepSeek Harness 那行：只扫直属层），而安装器把技能摊平成 `<agent>/skills/project-spec/` 后正好每家都满足——这也是为什么手工放置时同样别把整个仓库塞进技能目录。
 
 ```
 README.md
 LICENSE                             MIT
-skills/new-project-spec/            ← 一个完整的 Agent Skill，可整目录拷走
+skills/project-spec/            ← 一个完整的 Agent Skill，可整目录拷走
   SKILL.md                          入口：模式判断、操作步骤与关键取舍
   scripts/
     scaffold.mjs                    生成骨架；--stack / --backend / --link-hooks
