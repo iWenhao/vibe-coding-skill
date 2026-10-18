@@ -98,7 +98,7 @@ node <skill-dir>/scripts/audit.mjs [目标目录，默认当前]
 1. **常用命令**——只列命令，门槛指向「验证节奏」，两处不重复。
 2. **环境与已知坑**——仓库属性 vs `〔本机〕` 分开标注，换机器不照搬。
 3. **任务清单与进度可见性**——多步任务必须有对用户可见的清单，开工与收尾各附一份。
-4. **工作流约定**——分支模型、一个功能一个提交、提交信息前缀白名单 + 标题 ≤30 **字符**（汉字算 1）、细节写 CHANGELOG、重要文件改动同轮同步 README（钩子拦截）、版本号只在明确发版时动。
+4. **工作流约定**——分支模型、一个功能一个提交、并行改动按「原生工作树隔离 → 手工 worktree → 同工作树三条硬规矩」分层、提交信息前缀白名单 + 标题 ≤30 **字符**（汉字算 1）、细节写 CHANGELOG、重要文件改动同轮同步 README（钩子拦截）、版本号只在明确发版时动。
 5. **代码风格**——注释中文且只说「为什么」；先找现成的、**三次必收敛**；超阈值必拆。
 6. **验证节奏**——按改动范围分级的表格，含「用户可见输出必须真跑一次」这条优先级最高的例外。
 7. **测试**——单测放被测文件同目录；核心逻辑补测，UI 不强求但改 UI 要浏览器实测。
@@ -118,7 +118,7 @@ node <skill-dir>/scripts/audit.mjs [目标目录，默认当前]
 
 ## Resources
 
-- [references/conventions-kernel.md](references/conventions-kernel.md)——栈无关约定内核全文（提交/README 同步/版本/CHANGELOG/防重复/拆分/进度清单/验证分级/测试）。
+- [references/conventions-kernel.md](references/conventions-kernel.md)——栈无关约定内核全文（提交/README 同步/版本/CHANGELOG/并行改动隔离/防重复/拆分/进度清单/验证分级/测试）。
 - [references/stack-vue-ts.md](references/stack-vue-ts.md)——Vue3 + TS + Vite + Pinia 落地细节与配置逐项理由。
 - [references/pitfalls.md](references/pitfalls.md)——「环境与已知坑」一节的写法规约与通用条目。
 - `scripts/scaffold.mjs`——生成骨架，支持 `--stack vue-ts|none`、`--backend`、`--link-hooks`。
