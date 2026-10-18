@@ -77,8 +77,9 @@ scaffold 用 `--stack vue-ts` 时生成的配置，每一项的**理由**写在�
 - `server/*.mjs` 零依赖（只用 `node:` 内置模块），单文件起 HTTP 服务，数据落 `DATA_DIR` 下的 `*.json`。
 - 前端 `RemoteStorageAdapter` 通过 `/api/storage/*` 访问；启动时探测后端在线与否，不在线回落本地存储。**这个探测让「纯前端托管」和「带存储部署」两种形态共用一份代码**。
 - Vite 代理 `/api` → 后端端口；改代理或后端路由后**需重启 dev server**。
-- 环境变量集中在 `.env.example`：前端构建期 `VITE_*`，后端运行期 `PORT` / `HOST` / `DATA_DIR` / `MAX_BODY_BYTES` / `CORS_ORIGIN` / `AUTH_TOKEN`。默认值保守（只监听 127.0.0.1、拦截内网地址防 SSRF、校验证书），放开是显式选择。
-- 运行时数据目录（`server/data/`）**必须进 `.gitignore`**——里面会有会话、用户哈希等真实数据，最容易在 `git add -A` 时误入提交。
+- 环境变量以 `.env.example` 为**单一清单**，只列 `server/index.mjs` 真读的那几个：`PORT` / `HOST` / `DATA_DIR` / `MAX_BODY_BYTES` / `CORS_ORIGIN` / `AUTH_TOKEN`，加前端 `VITE_*`（构建期注入，改了要重新构建）。**加开关必须代码与清单一起改**——文档里写了代码没读的变量，用户设了没反应，就是一份假接口（这次清理掉五条这种条目：`NOTIFY_ALLOW_PRIVATE`、`NOTIFY_TIMEOUT_MS`、`SMTP_REJECT_UNAUTHORIZED`、`SEED_PASSWORD`、以及并不存在的 `_users.json` 账号体系）。
+- 默认值保守（只监听 `127.0.0.1`、`CORS_ORIGIN=*`、请求体有上限），放开是显式选择。`AGENTS.md`、`docs/DEPLOY.md` 与 `server/index.mjs` 头注释都**不再重列这份清单**，各留一句指针——四处各写一遍，改一处就漏三处。
+- 运行时数据目录（`server/data/`）**必须进 `.gitignore`**——里面是应用写入的真实数据，最容易在 `git add -A` 时误入提交。
 - 前后端共用的纯逻辑（如启动横幅布局）放 `shared/`，两侧引同一份，避免各写一遍后显示不一致。
 
 ## 目录结构基线

@@ -12,12 +12,10 @@
  *   DELETE /api/storage/:key            → 删除；不存在视为成功（幂等）
  *   前端经 Vite 代理访问：浏览器侧路径是 /api/*，所以这里的路由要带 /api 前缀
  *
- * 安全与兼容注意点：
- *   - 默认只监听 127.0.0.1：局域网/公网可达需要显式设 HOST=0.0.0.0；
- *   - AUTH_TOKEN 一旦设置，所有 /api/* 都要求 Bearer 一致（/health 不要求，前端要靠它探测）；
+ * 安全与兼容注意点（只写代码层面的不变量；配置项与默认值一律看 .env.example，不在此重复）：
+ *   - /health 不鉴权，其余 /api/* 在设置了 AUTH_TOKEN 后要求 Bearer 一致——前端正是靠 /health 判断在线；
  *   - 键名会被拼进文件路径，必须清洗（见 safeFileName），否则 `../../etc/passwd` 这类键能越出数据目录；
- *   - 请求体有上限，防止一次大上传把内存打满；
- *   - 数据目录里的 *.json 含真实数据，已在 .gitignore 中排除，别提交、别放进公开备份。
+ *   - 数据目录里的 *.json 是应用写入的真实数据，已在 .gitignore 中排除，别提交、别放进公开备份。
  */
 import { createServer } from 'node:http'
 import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises'

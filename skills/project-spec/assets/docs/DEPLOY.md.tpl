@@ -25,15 +25,10 @@ pnpm build
 PORT={{API_PORT}} HOST=127.0.0.1 DATA_DIR=/var/lib/{{NAME}}/data node server/index.mjs
 ```
 
-全部可调项见 `.env.example`。安全默认值（**放开必须是显式选择**）：
+全部可调项只列在 `.env.example`，本文件不重复那份清单。默认值保守：只监听 `127.0.0.1`、`CORS_ORIGIN` 为 `*`、请求体有上限。
+**放开任何一条都必须是显式选择**——跨域上线前把 `CORS_ORIGIN` 改成具体前端站点来源。
 
-- 只监听 `127.0.0.1`；
-- `CORS_ORIGIN` 默认 `*` 仅建议内网使用，生产填前端站点；
-- 通知类 HTTP 出口默认拦截内网/回环地址（防 SSRF），`NOTIFY_ALLOW_PRIVATE=1` 才放开；
-- 请求体上限 `MAX_BODY_BYTES`，防止上传打满内存；
-- 可选服务主密钥 `AUTH_TOKEN`（Bearer），与前端 `VITE_API_TOKEN` 一致。
-
-`DATA_DIR` 下是 `*.json` 运行时数据，**含用户与凭据信息，不要提交进仓库、不要放进公开备份**；
+`DATA_DIR` 下是 `*.json` 运行时数据，**是应用写入的真实内容，不要提交进仓库、不要放进公开备份**；
 容器部署时挂持久卷。
 {{/BACKEND}}
 
