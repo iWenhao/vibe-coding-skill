@@ -39,7 +39,7 @@ node <skill-dir>/scripts/scaffold.mjs \
 
 可选：`--dev-port 5173` `--api-port 5174` `--force`（目标目录已有同名文件时默认跳过并告警，`--force` 才覆盖）。
 
-产物：`AGENTS.md` `CHANGELOG.md` `README.md` `docs/{USER_GUIDE,DEPLOY}.md` `.gitignore` `.env.example`、`scripts/{commit-msg-check.mjs,check-long-files.mjs,hooks/commit-msg}`，`--stack vue-ts` 时再加 `package.json` `tsconfig*.json` `vite.config.ts` `vitest.config.ts` `eslint.config.js` `pnpm-workspace.yaml` 与 `src/` 最小可跑入口。
+产物：`AGENTS.md` `CHANGELOG.md` `README.md` `docs/{USER_GUIDE,DEPLOY,WORKFLOW}.md` `.gitignore` `.env.example`、`scripts/{commit-msg-check.mjs,check-long-files.mjs,hooks/commit-msg}`，`--stack vue-ts` 时再加 `package.json` `tsconfig*.json` `vite.config.ts` `vitest.config.ts` `eslint.config.js` `pnpm-workspace.yaml` 与 `src/` 最小可跑入口。
 
 **第 3 步——脚本生成不了的两节，必须人工补**，否则 AGENTS.md 只是空壳：
 
@@ -98,7 +98,7 @@ node <skill-dir>/scripts/audit.mjs [目标目录，默认当前]
 1. **常用命令**——只列命令，门槛指向「验证节奏」，两处不重复。
 2. **环境与已知坑**——仓库属性 vs `〔本机〕` 分开标注，换机器不照搬。
 3. **任务清单与进度可见性**——多步任务必须有对用户可见的清单，开工与收尾各附一份。
-4. **工作流约定**——分支模型、一个功能一个提交、并行改动按「原生工作树隔离 → 手工 worktree → 同工作树三条硬规矩」分层、提交信息前缀白名单 + 标题 ≤30 **字符**（汉字算 1）、细节写 CHANGELOG、重要文件改动同轮同步 README（钩子拦截）、版本号只在明确发版时动。
+4. **工作流约定**——分支模型、一个功能一个提交、并行改动按「原生工作树隔离 → 手工 worktree → 同工作树三条硬规矩」分层、提交信息前缀白名单 + 标题 ≤30 **字符**（汉字算 1）、细节写 CHANGELOG、重要文件改动同轮同步 README（钩子拦截）、版本号只在明确发版时动。其中「怎么开工作树、版本号怎么进位」这类**只在某一轮用得上**的细则外置到 `docs/WORKFLOW.md`，主文件留硬规矩加触发条件——每轮都要守的那半句（绝不 `git add -A`、平时不动版本号）**不能挪**。
 5. **代码风格**——注释中文且只说「为什么」；先找现成的、**三次必收敛**；超阈值必拆。
 6. **验证节奏**——默认动作是「跑受影响的测试」而不是全量（受限环境里全量的绿灯本身可能不可信），按改动范围分级的表格，含「用户可见输出必须真跑一次」这条优先级最高的例外。
 7. **测试**——单测放被测文件同目录；核心逻辑补测，UI 不强求但改 UI 要浏览器实测；纯逻辑用例自己声明轻量环境，别一律吃浏览器模拟环境。
@@ -111,6 +111,7 @@ node <skill-dir>/scripts/audit.mjs [目标目录，默认当前]
 
 - **机械拦截优先**：提交信息、README 同步与文件行数都做成脚本 + 钩子，文字约定只解释「为什么」。检查脚本存在但没接钩子 = 约定没生效（audit 的「执行级」专查这个）。
 - **Windows 坑用 Node 替 PowerShell**：本 Skill 的行数检查是 `check-long-files.mjs`，不是原仓库的 `.ps1`。理由：不依赖 PS 5.1 的 ANSI 代码页（`.ps1` 无 BOM 会 ParserError）、CI 与非 Windows agent 可跑、计行与行尾风格无关。
+- **`AGENTS.md` 只装「每轮都要用」的规则，并按字节算预算**：Codex 的 `project_doc_max_bytes` 默认把「项目根 → 工作目录」这条链上所有 AGENTS.md **合并**算 32 KiB，拼满就不再加载更靠近工作目录的那份（是整份进不来，不是尾部截断）。细则只能挪进同仓库 `docs/` 并写明何时必读，**不能挪进本 Skill 的 `references/`**——references 不随生成的仓库走，挪过去等于内容消失。`audit` 按这份预算报字节与占比，体积因此是看得见的数字。
 - **不生成领域代码**：本 Skill 只造「规范 + 骨架」。渲染引擎、图形元素注册、数据源适配器这类业务实现属于源仓库自身，别往新项目里塞。
 - **工具认不出的生态要跳过，不是报缺失**：`audit` 先探测仓库语言再决定哪些检查适用——把「工具不认识这门语言」写成「这个项目缺东西」会让退出码 1 失去意义，也会误导用户去补不存在的问题。行数阈值同理只覆盖 js/ts/vue/css。
 - **`〔本机〕` 内容不带入新仓库**：系统代理端口、凭据助手弹窗、TUN 拦 `::1` 等是原机器的事实；新项目里只保留「如何标注与排查这类坑」的方法。
