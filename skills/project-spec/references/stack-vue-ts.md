@@ -50,6 +50,26 @@ scaffold 用 `--stack vue-ts` 时生成的配置，每一项的**理由**写在�
 
 `environment: 'jsdom'`、`globals: true`，`include` 要**显式列出所有被测目录**——默认只扫 src，工具脚本与共用纯逻辑目录（`shared/`、`scripts/`）会被静默漏掉。测试统一放被测文件同目录。
 
+### 按范围挑着跑的三条命令
+
+写进 `AGENTS.md`「验证节奏」表的就是这三条（全量只在提交前跑）：
+
+| 想验证的范围 | 命令 |
+| --- | --- |
+| 单个文件 / 模块 | `npx vitest run src/utils` |
+| 一批改动（未提交的也算） | `npx vitest run --changed` |
+| 几条特定用例 | `npx vitest run -t "关键词"` |
+
+三条都接受路径子串做模糊匹配，多个参数是「或」关系。
+
+### 每个测试文件自己选环境
+
+配置里的 `environment: 'jsdom'` 是**默认值，不是每个文件的需求**——jsdom 环境的启动开销远大于纯逻辑用例本体。
+
+- 纯逻辑测试（工具函数、纯数学/几何、协议解析、Pinia store 的纯状态流转、数据结构）：文件**第一行**写 `// @vitest-environment node`。
+- 真用了 `mount` / `document` / `window` / `localStorage` / canvas / `ResizeObserver` 的：保持默认 jsdom。
+- 判据看**用例自身**，被测源码可能间接摸浏览器 API；改完必须真跑一遍确认，炸了就退回默认。
+
 ## 前端 + 可选零依赖后端（`--backend`）
 
 这套形态值得复制：**前端是纯前端项目（构建产物可直接托管），后端是可选的存储服务，不在线时回落 localStorage**。
