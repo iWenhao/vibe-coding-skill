@@ -10,3 +10,33 @@ $RECYCLE.BIN/
 
 # Windows shortcuts
 *.lnk
+
+### 依赖与构建产物
+# 本仓库脚本零第三方依赖，但就地渲染探针项目验证模板时会装出这些
+node_modules/
+dist/
+build/
+
+### 探针渲染目录
+# 验证用，跑完即删；万一留下也不入库
+.probe-*/
+
+### 本地日志与临时文件
+.tmp-*
+*.log
+
+### AI 工具本地配置
+# 每个 agent 自己的目录，不属于仓库
+.workbuddy/
+.zcodeignore
+.playwright-cli/
+
+### Windows 保留设备名
+# bash 里 `> nul` 会建出一个名为 nul 的真实文件，同类 con/aux/prn/com1-9/lpt1-9 也一样，
+# 且建出来可能删不掉，故一并忽略以防误入提交
+nul
+con
+aux
+prn
+com[1-9]
+lpt[1-9]
