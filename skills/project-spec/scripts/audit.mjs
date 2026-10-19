@@ -11,12 +11,21 @@
  * 第二条设计：**生态探测只决定「这项检查适不适用」**。非 Node 仓库会跳过 node_modules/dist、
  * package.json 脚本等条目并说明原因，而不是报成缺失——假缺失会污染退出码 1 的信号。
  */
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
-import { execFileSync } from 'node:child_process'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { join, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
+import {
+  detectLangs,
+  git,
+  inferRoots,
+  isGitRepo,
+  LANG_BY_EXT,
+  loadChecker,
+  readIf,
+  TEST_SHAPES,
+  walk,
+} from './repo-facts.mjs'
 
-const SKILL_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const REQUIRED_AGENT_SECTIONS = [
   '项目概述',
   '常用命令',
@@ -64,106 +73,6 @@ function makeReporter() {
       console.log(`\n合计：${missing} 项缺失、${warnings} 项待注意`)
       return missing
     },
-  }
-}
-
-function readIf(path) {
-  try {
-    return existsSync(path) && statSync(path).isFile() ? readFileSync(path, 'utf8') : null
-  } catch {
-    return null
-  }
-}
-
-function walk(dir, filter, prefix = '') {
-  const found = []
-  let entries
-  try {
-    entries = readdirSync(dir, { withFileTypes: true })
-  } catch {
-    return found
-  }
-  for (const entry of entries) {
-    const rel = prefix === '' ? entry.name : `${prefix}/${entry.name}`
-    if (entry.isDirectory()) {
-      if (['node_modules', 'dist', 'build', '.git', 'coverage'].includes(entry.name)) continue
-      found.push(...walk(join(dir, entry.name), filter, rel))
-      continue
-    }
-    if (filter(entry.name)) found.push(rel)
-  }
-  return found
-}
-
-/**
- * 生态探测：**只用来决定「这项检查适不适用」**，不用来判断合规。
- * 理由：把「工具不认识这门语言」写成「这个项目缺了东西」会产出假缺失，
- * 而退出码 1 正是驱动「只补缺项」流程的信号，被假缺失污染后整个流程失去意义。
- */
-const LANG_BY_EXT = new Map([
-  ['js', 'node'], ['mjs', 'node'], ['cjs', 'node'], ['ts', 'node'], ['tsx', 'node'], ['jsx', 'node'], ['vue', 'node'],
-  ['py', 'python'], ['go', 'go'], ['java', 'java'], ['kt', 'kotlin'], ['rs', 'rust'],
-])
-
-/** 各生态测试文件的命名形状；不在表内的语言只报数量，不判缺失 */
-const TEST_SHAPES = [
-  { lang: 'node', re: /\.(test|spec)\.[cm]?[jt]sx?$/ },
-  { lang: 'python', re: /(?:test_[^/\\]+\.py|[^/\\]+_test\.py)$/ },
-  { lang: 'go', re: /[^/\\]+_test\.go$/ },
-  { lang: 'java', re: /[^/\\]+Tests?\.java$/ },
-]
-
-function detectLangs(files) {
-  const langs = new Set()
-  for (const path of files) {
-    const ext = path.slice(path.lastIndexOf('.') + 1).toLowerCase()
-    const lang = LANG_BY_EXT.get(ext)
-    if (lang !== undefined) langs.add(lang)
-  }
-  return langs
-}
-
-/** 约定目录一个都不存在时，用「顶层有源码的目录」兜底，免得整仓扫不到东西却报缺失 */
-function inferRoots(files) {
-  const dirs = new Set()
-  for (const path of files) {
-    const top = path.split('/')[0]
-    if (top !== path && !['docs', 'public'].includes(top)) dirs.add(top)
-  }
-  return [...dirs].sort()
-}
-
-/** 优先用目标仓库自己的校验器；没有则退回 Skill 的 asset 副本（并据此判定该项缺失） */
-async function loadChecker(target, fileName) {
-  const projectPath = join(target, 'scripts', fileName)
-  const projectSource = readIf(projectPath)
-  if (projectSource !== null) {
-    try {
-      const mod = await import(pathToFileURL(projectPath).href)
-      return { mod, fromProject: true }
-    } catch {
-      /* 项目里的脚本坏了，退回副本 */
-    }
-  }
-  const mod = await import(pathToFileURL(join(SKILL_ROOT, 'assets', 'scripts', fileName)).href)
-  return { mod, fromProject: false }
-}
-
-/**
- * 只在目标目录自身是 git 仓库时才执行 git 命令。
- * 必须显式判 .git：`git -C <子目录>` 会一路向上找到外层仓库，
- * 于是把父仓库的 hooksPath 与提交历史当成被体检项目的结论——实测发生过，报告看着全绿其实全错。
- */
-function isGitRepo(dir) {
-  return existsSync(join(dir, '.git'))
-}
-
-function git(target, args) {
-  if (!isGitRepo(target)) return null
-  try {
-    return execFileSync('git', ['-C', target, ...args], { encoding: 'utf8' }).trim()
-  } catch {
-    return null
   }
 }
 
@@ -242,17 +151,42 @@ async function main() {
   else if (checker === null) r.report('执行级', 'missing', '钩子存在但缺 scripts/commit-msg-check.mjs，钩子会静默跳过校验')
   else r.report('执行级', 'ok', 'commit-msg 钩子与校验脚本齐备')
 
-  // 文档同步拦截是后加的能力：旧版校验脚本没有 checkDocSync 导出，报 warn 引导重拷升级
+  // 文档同步拦截是后加的能力：更旧的校验脚本连 checkDocSync 都没有，报 warn 引导重拷升级。
+  // 现版把单目标 README 清单换成了成对规则 DOC_SYNC_RULES——DOC_SYNC_PATTERNS 那种旧版只拦
+  // README，「改了服务端/请求封装却没同步接口文档」这一类不会拦，同样报 warn 引导升级。
   if (checker !== null) {
-    let hasDocSync = false
+    let rules = null
+    let legacy = false
     try {
       const mod = await import(pathToFileURL(join(target, 'scripts', 'commit-msg-check.mjs')).href)
-      hasDocSync = typeof mod.checkDocSync === 'function'
+      rules = Array.isArray(mod.DOC_SYNC_RULES) ? mod.DOC_SYNC_RULES : null
+      legacy = rules === null && (Array.isArray(mod.DOC_SYNC_PATTERNS) || typeof mod.checkDocSync === 'function')
     } catch {
       /* 项目脚本损坏：历史级会经 loadChecker 兜底报告，这里不重复报 */
     }
-    if (hasDocSync) r.report('执行级', 'ok', '文档同步拦截已内置（checkDocSync：重要文件改动需同步 README）')
-    else r.report('执行级', 'warn', 'commit-msg-check.mjs 缺 checkDocSync（旧版本）——重要文件改动不会拦 README 未同步，从 Skill 的 assets/scripts/ 重拷可升级')
+    if (rules !== null) {
+      r.report('执行级', 'ok', `文档同步拦截已内置（DOC_SYNC_RULES ${rules.length} 条：${rules.map((rule) => rule.doc).join(' / ')}）`)
+    } else if (legacy) {
+      r.report('执行级', 'warn', 'commit-msg-check.mjs 是 DOC_SYNC_PATTERNS 旧版——只拦 README 未同步，接口文档这类成对约定不会拦；从 Skill 的 assets/scripts/ 重拷可升级')
+    } else {
+      r.report('执行级', 'warn', 'commit-msg-check.mjs 缺 checkDocSync（更旧版本）——重要文件改动不会拦文档未同步，从 Skill 的 assets/scripts/ 重拷可升级')
+    }
+  }
+
+  // 推送前的全量把关：钩子与把关脚本必须成对，缺后者时钩子只会打一行提示然后 exit 0（静默放行）
+  const prePush = readIf(join(target, 'scripts/hooks/pre-push'))
+  const prePushChecker = readIf(join(target, 'scripts/pre-push-check.mjs'))
+  if (prePush === null) r.report('执行级', 'missing', '缺 scripts/hooks/pre-push（底线检查只靠人自觉，推送前没有全量把关）')
+  else if (prePushChecker === null) r.report('执行级', 'warn', 'pre-push 钩子在但缺 scripts/pre-push-check.mjs——钩子打印一行提示后 exit 0，等于静默放行')
+  else r.report('执行级', 'ok', 'pre-push 钩子与推送前把关脚本齐备')
+
+  // 可执行位：非 Windows 的 git 对没有 x 位的钩子直接跳过，于是把关只在开发机生效
+  if (process.platform === 'win32') {
+    r.report('执行级', 'info', '钩子可执行位未校验——Windows 上 statSync 的 mode 不反映 git 的判断，需在 Linux/macOS 或 CI 上查（scaffold 会对 scripts/hooks/ 下每个文件 chmod 0755）')
+  } else {
+    const noExec = ['scripts/hooks/commit-msg', 'scripts/hooks/pre-push']
+      .filter((p) => readIf(join(target, p)) !== null && (statSync(join(target, p)).mode & 0o111) === 0)
+    if (noExec.length > 0) r.report('执行级', 'warn', `钩子缺可执行位，git 会跳过它们：${noExec.join(', ')}（chmod +x 后重试）`)
   }
 
   const inRepo = isGitRepo(target)
@@ -287,7 +221,11 @@ async function main() {
       r.report('配置级', 'info', `识别到的生态：${langList}——不是 Node 项目，跳过 node_modules/dist 检查（构建产物目录请按项目实际补进 .gitignore）`)
     }
     const coversRuntime = patterns.some((line) => /data\/$|server\/data\/$|\/data$/u.test(line))
-    if (coversRuntime) r.report('配置级', 'ok', '.gitignore 覆盖运行时数据目录')
+    // 只在「这个项目确实会往磁盘写数据」时才检查：没有 server/ 也没声明 DATA_DIR，就没有运行时数据目录，
+    // 报一条 ⚠️ 就是假缺失——假缺失会污染「只补缺项」的退出码信号（见第 2 节生态探测的同一条分工）
+    const writesData = existsSync(join(target, 'server')) || /DATA_DIR/.test(readIf(join(target, '.env.example')) ?? '')
+    if (!writesData) r.report('配置级', 'info', '.gitignore 运行时数据目录检查已跳过——没有 server/ 与 DATA_DIR，当前形态不落盘（以后加了数据目录记得一并忽略）')
+    else if (coversRuntime) r.report('配置级', 'ok', '.gitignore 覆盖运行时数据目录')
     else r.report('配置级', 'warn', '.gitignore 未忽略运行时数据目录——含真实数据的 *.json 最容易在 git add -A 时误入')
     if (patterns.includes('nul')) r.report('配置级', 'ok', '.gitignore 覆盖 Windows 保留设备名（防 `> nul` 误建文件入库）')
     else r.report('配置级', 'warn', '.gitignore 未忽略 nul/con/aux 等保留设备名（bash 里 `> nul` 会建出真实文件）')
