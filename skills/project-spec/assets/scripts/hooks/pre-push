@@ -1,0 +1,27 @@
+#!/bin/sh
+# Git pre-push 钩子：把待推送引用清单交给 scripts/pre-push-check.mjs 跑全量四件套。
+#
+# 启用（每个克隆执行一次）：git config core.hooksPath scripts/hooks
+# 临时绕过：git push --no-verify
+#
+# 为什么只做转发、判断逻辑放在 Node 脚本里：git 通过 stdin 传进来的是
+# 「<本地 ref> <本地 oid> <远端 ref> <远端 oid>」四字段清单，要据此分辨「只推 tag」「只删引用」，
+# 用 shell 解析空字段与管道容易出错，退出码还得原样透传给 git——钩子看的就是这个退出码。
+# 本文件按自身路径定位脚本（不依赖仓库根位置），故 core.hooksPath 填相对或绝对路径都能工作。
+set -u
+
+hook_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit 0
+checker="$hook_dir/../pre-push-check.mjs"
+
+if [ ! -f "$checker" ]; then
+  echo "[pre-push] 未找到 $checker，跳过推送前全量把关" >&2
+  exit 0
+fi
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "[pre-push] 未找到 node，跳过推送前全量把关" >&2
+  exit 0
+fi
+
+# exec 让 node 直接继承 git 传入的 stdin（待推送清单）与退出码
+exec node "$checker" "${1:-}" "${2:-}"

@@ -3,6 +3,7 @@
 
 # 钩子由 git 在 POSIX 上直接 exec，shebang 带 \r 会报 bad interpreter
 commit-msg text eol=lf
+pre-push text eol=lf
 
 # 这两类会被原样拷进生成的仓库，锁定 LF 让不同 OS 的克隆拿到同一份字节
 *.mjs text eol=lf
