@@ -74,10 +74,12 @@ scaffold 用 `--stack vue-ts` 时生成的配置，每一项的**理由**写在�
 
 这套形态值得复制：**前端是纯前端项目（构建产物可直接托管），后端是可选的存储服务，不在线时回落 localStorage**。
 
-- `server/*.mjs` 零依赖（只用 `node:` 内置模块），单文件起 HTTP 服务，数据落 `DATA_DIR` 下的 `*.json`。
-- 前端 `RemoteStorageAdapter` 通过 `/api/storage/*` 访问；启动时探测后端在线与否，不在线回落本地存储。**这个探测让「纯前端托管」和「带存储部署」两种形态共用一份代码**。
-- Vite 代理 `/api` → 后端端口；改代理或后端路由后**需重启 dev server**。
-- 环境变量以 `.env.example` 为**单一清单**，只列 `server/index.mjs` 真读的那几个：`PORT` / `HOST` / `DATA_DIR` / `MAX_BODY_BYTES` / `CORS_ORIGIN` / `AUTH_TOKEN`，加前端 `VITE_*`（构建期注入，改了要重新构建）。**加开关必须代码与清单一起改**——文档里写了代码没读的变量，用户设了没反应，就是一份假接口（这次清理掉五条这种条目：`NOTIFY_ALLOW_PRIVATE`、`NOTIFY_TIMEOUT_MS`、`SMTP_REJECT_UNAUTHORIZED`、`SEED_PASSWORD`、以及并不存在的 `_users.json` 账号体系）。
+- `server/*.mjs` 零依赖（只用 `node:` 内置模块 + 本目录 `lib/`），单文件起 HTTP 服务，数据落 `DATA_DIR` 下的 `*.json`。
+- **响应形状各只有一处落点**：服务端 `server/lib/http.mjs`（`sendData`/`sendFail`）出、前端 `src/api/client.ts`（`apiFetch`/`apiData`）拆；失败只抛 `server/lib/apiError.mjs` 的 `ApiError(status, code, message, meta)`，由 `server/index.mjs` 最外层 catch 统一翻译。形状规则本身与理由在约定内核「接口响应约定」，这里只记本栈写在哪。
+- **逐端点错误码表在 `docs/DEPLOY.md`「接口错误码」**，与 `apiError.mjs` 的常量同步；新增码先加常量再补表。**两个 404 必须分开**（`KEY_NOT_FOUND` 与 `ROUTE_NOT_FOUND`）：只看状态码的调用方会把「base 配错」读成「键本来没有」，症状是一屏空数据而不报错。
+- 前端远程实现（`src/storage` 里的 `createRemoteStore`）经 `src/api/client` 访问 `/api/storage/*`；启动时探测后端在线与否，不在线回落本地存储。**这个探测让「纯前端托管」和「带存储部署」两种形态共用一份代码**。
+- Vite 代理 `/api` → 后端端口，**不做 rewrite**：浏览器侧打得出去的路径都自带 `/api`，裸 `/health` 只有直连后端时才通。所以后端**同时认 `/health` 与 `/api/health`**——只认一边，另一边就是静默 404，而探测 404 的表征恰好是「回落本地存储」，看起来跟「后端没启动」一模一样（这条坑真实存在过，详见 [pitfalls.md](pitfalls.md)）。改代理或后端路由后**需重启 dev server**。
+- 环境变量以 `.env.example` 为**单一清单**，只列 `server/**` 真读的那几个：`PORT` / `HOST` / `DATA_DIR` / `MAX_BODY_BYTES` / `CORS_ORIGIN` / `AUTH_TOKEN`，加前端 `VITE_*`（构建期注入，改了要重新构建）。注意 `CORS_ORIGIN` 现在由 `server/lib/http.mjs` 读、不在 `index.mjs` 里——**清单的判据是「服务端有没有读它」，不是「在哪个文件里读」**。**加开关必须代码与清单一起改**——文档里写了代码没读的变量，用户设了没反应，就是一份假接口（曾清理掉五条这种条目：`NOTIFY_ALLOW_PRIVATE`、`NOTIFY_TIMEOUT_MS`、`SMTP_REJECT_UNAUTHORIZED`、`SEED_PASSWORD`、以及并不存在的 `_users.json` 账号体系）。
 - 默认值保守（只监听 `127.0.0.1`、`CORS_ORIGIN=*`、请求体有上限），放开是显式选择。`AGENTS.md`、`docs/DEPLOY.md` 与 `server/index.mjs` 头注释都**不再重列这份清单**，各留一句指针——四处各写一遍，改一处就漏三处。
 - 运行时数据目录（`server/data/`）**必须进 `.gitignore`**——里面是应用写入的真实数据，最容易在 `git add -A` 时误入提交。
 - 前后端共用的纯逻辑（如启动横幅布局）放 `shared/`，两侧引同一份，避免各写一遍后显示不一致。
