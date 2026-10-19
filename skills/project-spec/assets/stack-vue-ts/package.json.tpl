@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
-    "lint": "eslint src{{#BACKEND}} server shared scripts{{/BACKEND}}{{^BACKEND}} scripts{{/BACKEND}}",
+    "lint": "eslint src{{#BACKEND}} server scripts{{/BACKEND}}{{^BACKEND}} scripts{{/BACKEND}}",
     "test": "vitest",
     "test:coverage": "vitest --coverage",
     "check:lines": "node scripts/check-long-files.mjs --roots src{{#BACKEND}},server{{/BACKEND}}"{{#BACKEND}},
