@@ -73,8 +73,36 @@ describe('checkDocSync', () => {
   it('根目录配置文件按正则命中，嵌套路径不误伤', () => {
     expect(checkDocSync(['vite.config.ts'], '优化: 换构建配置').blocked).toBe(true)
     expect(checkDocSync(['src/inner.config.ts'], '优化: 内部配置').blocked).toBe(false)
-    // monorepo 的子包 package.json 默认不在清单内，需要时自行往 DOC_SYNC_PATTERNS 加条目
+    // monorepo 的子包 package.json 默认不在规则内，需要时自行往 DOC_SYNC_RULES 加条目
     expect(checkDocSync(['packages/app/package.json'], '优化: 子包依赖').blocked).toBe(false)
+  })
+
+  it('服务端与前端请求入口改动要求同步接口文档', () => {
+    for (const file of ['server/index.mjs', 'src/api/client.ts']) {
+      const result = checkDocSync([file], '功能: 加一个端点')
+      expect(result.blocked).toBe(true)
+      expect(result.reason).toContain('docs/DEPLOY.md')
+      expect(result.reason).toContain(file)
+    }
+  })
+
+  it('规则之间互不豁免：只补 README 不能放行改了服务端却没同步码表的提交', () => {
+    const result = checkDocSync(['server/index.mjs', 'README.md'], '功能: 加一个端点')
+    expect(result.blocked).toBe(true)
+    expect(result.reason).toContain('docs/DEPLOY.md')
+  })
+
+  it('两条规则同时缺同步时一起报出各自的文档', () => {
+    const result = checkDocSync(['package.json', 'server/index.mjs'], '功能: 加端点并换构建脚本')
+    expect(result.blocked).toBe(true)
+    expect(result.reason).toContain('README.md')
+    expect(result.reason).toContain('docs/DEPLOY.md')
+  })
+
+  it('命中规则的文档已同步时通过', () => {
+    expect(
+      checkDocSync(['server/index.mjs', 'docs/DEPLOY.md'], '功能: 加一个端点').blocked,
+    ).toBe(false)
   })
 
   it('取不到暂存区清单时降级为提示而不是拦死', () => {

@@ -1,11 +1,11 @@
 /**
  * 提交信息校验 + 文档同步检查（纯函数 + CLI），由 scripts/hooks/commit-msg 调用。
  *
- * 约定见 AGENTS.md「工作流约定 · 提交信息 / README 同步」：
+ * 约定见 AGENTS.md「工作流约定 · 提交信息 / 文档同步」：
  *   - 标题（首行）≤ MAX_SUBJECT_LENGTH 字符（含「功能:」类前缀），超出即拒绝提交；
  *   - 标题必须以 PREFIXES 白名单里的前缀开头；
  *   - 细节一律写进 CHANGELOG.md，提交不留长正文（正文非空只提示、不阻断）；
- *   - 暂存区命中 DOC_SYNC_PATTERNS 清单里的文件而 README.md 未同步时拒绝提交，
+ *   - 暂存区命中 DOC_SYNC_RULES 里某条规则的文件而该规则要求的文档未同步时拒绝提交，
  *     豁免走正文 DOC_SYNC_MARKER 标记（随提交入库、可 grep）或 git commit --no-verify。
  *
  * 为什么校验逻辑在 Node 而不是直接写在钩子脚本里：长度按「字符」计（一个汉字算 1），
@@ -24,19 +24,34 @@ export const MAX_SUBJECT_LENGTH = 30
 export const PREFIXES = ['功能', '修复', '优化', '重构', '清理', '文档', '测试', '构建', '发版']
 
 /**
- * 触发「README 同步」检查的文件清单（相对仓库根，按 git 输出的正斜杠路径匹配）。
- * 这些文件决定 README 的「环境要求 / 快速开始 / 常用命令」是否还成立；
- * 精确名与正则混排，锚定在仓库根（带路径段的文件不命中）。monorepo 子包等按项目实际自行追加。
+ * 文档同步规则：命中 files 的暂存改动必须同步 doc，否则拒绝提交。
+ * 按仓库根（git 输出的正斜杠路径）匹配，一条不满足就单独报出来。
+ *
+ * files 只写根文件与目录级模式，不写具体业务文件名或端点路径——本脚本要拷进任何项目，
+ * 清单里出现某个项目自己的名字，换一个项目就成了误拦。规则按项目实际增删。
  */
-export const DOC_SYNC_PATTERNS = [
-  'package.json',
-  'pnpm-workspace.yaml',
-  '.env.example',
-  /^[\w@][\w.-]*\.config\.[cm]?[jt]sx?$/, // 根目录构建/工具配置：vite.config.ts、eslint.config.js…
-  /^tsconfig[\w.-]*\.json$/, // tsconfig.json 与 tsconfig.node.json 等派生
+export const DOC_SYNC_RULES = [
+  {
+    doc: 'README.md',
+    // 这些文件决定 README 的「环境要求 / 快速开始 / 常用命令」是否还成立
+    files: [
+      'package.json',
+      'pnpm-workspace.yaml',
+      '.env.example',
+      /^[\w@][\w.-]*\.config\.[cm]?[jt]sx?$/, // 根目录构建/工具配置：vite.config.ts、eslint.config.js…
+      /^tsconfig[\w.-]*\.json$/, // tsconfig.json 与 tsconfig.node.json 等派生
+    ],
+    why: 'README 的「环境要求 / 快速开始 / 常用命令」由这些文件决定',
+  },
+  {
+    doc: 'docs/DEPLOY.md',
+    // 服务端路由与前端请求封装：两者的对外行为都由这一张码表描述
+    files: [/^server\//, /^src\/api\//],
+    why: '「接口错误码」表是前后端唯一的码表来源，新增或改动端点必须同步那一节',
+  },
 ]
 
-/** 提交正文携带此标记 = 显式声明本次无需同步 README；标记随提交入库，git log 里可 grep 审计 */
+/** 提交正文携带此标记 = 显式声明本次无需同步文档；标记随提交入库，git log 里可 grep 审计 */
 export const DOC_SYNC_MARKER = '[skip-docs]'
 
 /** Git 自动生成的提交信息，不受本约定约束 */
@@ -86,21 +101,19 @@ export function checkCommitMessage(raw) {
   return { ok: errors.length === 0, exempt: false, subject, length, errors, warnings }
 }
 
-/**
- * 判断一个暂存文件是否命中文档同步清单。
- * @param {string} path 相对仓库根的路径
- */
-export function isDocSyncFile(path) {
+/** 暂存文件是否落在某条规则的文件清单里（按正斜杠路径比较，精确名或正则） */
+function ruleMatches(rule, path) {
   const normalized = String(path).replaceAll('\\', '/')
-  return DOC_SYNC_PATTERNS.some((pattern) =>
+  return rule.files.some((pattern) =>
     typeof pattern === 'string' ? normalized === pattern : pattern.test(normalized),
   )
 }
 
 /**
- * 文档同步检查：重要文件改动而 README.md 未同步时拒绝提交。
- * 「重大调整」没法机械判断，清单只覆盖高置信子集（决定 README 安装/命令/配置段落的文件）；
- * src/** 等内部改动是否牵连 README 属判断题，由 AGENTS.md 的文字规约约束同轮自查。
+ * 文档同步检查：逐条规则判断「命中该规则 files 的文件被改了，而该规则的 doc 没进暂存区」。
+ * 规则之间互不豁免——只同步 README 不能放行一次改了服务端路由却没同步码表的提交。
+ * 「重大调整」没法机械判断，清单只覆盖高置信子集；src/** 内部改动是否牵连文档属判断题，
+ * 由 AGENTS.md 的文字规约约束同轮自查。
  *
  * @param {string[]|null} changedFiles 暂存区文件清单（git diff --cached --name-only）；
  *   null = 取不到（非 git 仓库、git 缺失等），此时降级为提示而不拦——检查器坏了不能堵死正常提交
@@ -116,11 +129,13 @@ export function checkDocSync(changedFiles, messageText) {
     }
   }
 
-  const important = changedFiles.filter((file) => isDocSyncFile(file))
-  if (important.length === 0) {
-    return { blocked: false, reason: null, notices: [] }
+  const missed = []
+  for (const rule of DOC_SYNC_RULES) {
+    const hit = changedFiles.filter((file) => ruleMatches(rule, file))
+    if (hit.length === 0 || changedFiles.includes(rule.doc)) continue
+    missed.push({ doc: rule.doc, why: rule.why, files: hit })
   }
-  if (changedFiles.includes('README.md')) {
+  if (missed.length === 0) {
     return { blocked: false, reason: null, notices: [] }
   }
   if (String(messageText).includes(DOC_SYNC_MARKER)) {
@@ -133,9 +148,10 @@ export function checkDocSync(changedFiles, messageText) {
   return {
     blocked: true,
     reason:
-      `重要文件改动但 README.md 未同步：${important.join('、')}` +
-      `——README 的「环境要求 / 快速开始 / 常用命令」由这些文件决定；` +
-      `确无需同步时在提交正文单独一行写 ${DOC_SYNC_MARKER}（豁免可见、可 grep），或 git commit --no-verify`,
+      missed
+        .map((item) => `${item.files.join('、')} 改动但 ${item.doc} 未同步——${item.why}`)
+        .join('；') +
+      `；确无需同步时在提交正文单独一行写 ${DOC_SYNC_MARKER}（豁免可见、可 grep），或 git commit --no-verify`,
     notices: [],
   }
 }
@@ -192,7 +208,7 @@ if (invokedDirectly) {
     if (doc.blocked) {
       console.error('[commit-msg] 文档同步检查未通过：')
       console.error(`  · ${doc.reason}`)
-      console.error('  约定见 AGENTS.md「工作流约定 · README 同步」')
+      console.error('  约定见 AGENTS.md「工作流约定 · 文档同步」')
       process.exit(1)
     }
   }
