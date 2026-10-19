@@ -1,6 +1,6 @@
 # project-spec
 
-> 仓库名是 `vibe-coding-skill`,技能名是 `project-spec`(`skills/project-spec/`,显示名 Project Spec),两者不一致——安装命令用前者,`--skill` 与放置目录用后者。技能名原为 `new-project-spec`,因它还带着 audit 模式（给已有仓库上规范）而改掉：**装过的机器上旧名副本不会自己消失**，重装前先删掉各家目录里的 `skills/new-project-spec/`，否则两份并存；旧的安装命令 `--skill new-project-spec` 也已失效。
+> 仓库名是 `vibe-coding-skill`,技能名是 `project-spec`(`skills/project-spec/`,显示名 Project Spec),两者不一致——安装命令用前者,`--skill` 与放置目录用后者。
 
 一个符合 [Agent Skills 规范](https://agentskills.io)的 Skill：把工程协作约定变成可复制的产物——`AGENTS.md` 骨架 + 能机械拦截提交的脚本 + 文档地图 + 可选技术栈配置。
 
