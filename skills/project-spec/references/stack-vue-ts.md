@@ -12,13 +12,20 @@ scaffold 用 `--stack vue-ts` 时生成的配置，每一项的**理由**写在�
 | `element-plus` + `@element-plus/icons-vue` | 组件库与图标 | 图标在 `main.ts` 全局注册，SFC 里**不需要 import**（unplugin 也已配 resolver） |
 | `@vueuse/core` | 组合式工具 | 先查这里有没有现成的，再自己写 |
 | `echarts` | 图表 | 可选 |
-| `sass` | 样式 | vite 配 `api: 'modern-compiler'`，避免旧 legacy API 告警 |
+| `sass` | 样式 | vite 配 `api: 'modern-compiler'`，避免旧 legacy API 告警——**这个取值要 vite ≥5.4**，下界退回 5.2 时 vite 不认识它、会无声忽略，构建时照打 `legacy-js-api` 弃用告警 |
 
 图表、渲染引擎这类重依赖用 `manualChunks` 单独分包（见 `vite.config.ts` 模板），否则首屏 chunk 会把它们和 vue 打在一起。
 
 ## pnpm 与构建脚本白名单
 
 `pnpm-workspace.yaml` 的 `allowBuilds`（`esbuild` / `@parcel/watcher` / `vue-demi`）**不要删**：pnpm 10/11 会拦截依赖的构建脚本，删了表现为装完跑不起来。
+
+## caret 下界就是实际装到的那一个
+
+- 实测（pnpm 11.5 + npmmirror）：`^2.0.0` 装成 **2.0.0**、`^2.2.0` 装成 **2.2.0**，而同一个区间 npm 给 2.2.12——**包管理器可能按区间下界解析**，所以 `package.json` 里每个 `^x.y.z` 的下界不是「最低能编过」的声明，而是「这个仓库大概会装到的那一个」。写死在踩过大坑的发布版上，等于把坑复制给每个新仓库。
+- 踩过的实例：`vue-tsc` 曾写 `^2.0.0`，而 **2.0.0 是一次残缺发布**——tarball 里只有 `bin/vue-tsc.js`、`README`、`package.json`，没有它 `require('../index.js')` 要的 `index.js`，于是 `pnpm build` 第一步就 MODULE_NOT_FOUND。症状出现在构建链入口、报错里没有任何项目文件名，极易被误判成「模板写坏了 / 依赖没装好」而去重装或改 tsconfig。2.0.1 起都带 `index.js`，现钉 `^2.2.12`。
+- 判据：装完先看 `node_modules/<包>/index.js` 在不在，再跑 `pnpm build`；**别相信「pnpm 会自动挑最新版」这个直觉**。同理，`^2.0.0` 这种以 `.0.0` 收尾的下界要多看一眼——首发版本正是最容易残缺的那一个。
+- 同一机制的第二种坏法更隐蔽：**下界版本不认识配置文件里写的取值，会被无声忽略**（不是报错）。实例：`vite` 曾写 `^5.2.0`，而 `css.preprocessorOptions.scss.api: 'modern-compiler'` 是 vite 5.4 才有的取值，于是构建照样打 `legacy-js-api` 弃用告警——配置看着在、效果不在。现抬到 `^5.4.0`。所以**写了配置取值，就要在实跑的输出里确认它生效**（这条告警的消失就是靠比对两次构建输出确认的），只看配置文件不算验证过。
 
 ## tsconfig 三份，各管一片
 
