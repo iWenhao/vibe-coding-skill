@@ -24,9 +24,13 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { spawnSync } from 'node:child_process'
+import { spawnSync, execFileSync } from 'node:child_process'
 
-/** 全 0 的 oid = git 用它表示「删除该远端引用」，不引入任何新代码 */
+/**
+ * 全 0 的 oid。**两处含义相反，别混**：本地 oid 全 0 = git 表示「删除该远端引用」（没有新代码）；
+ * 远端 oid 全 0 = 「对端还没有这个引用」，即新建分支或新推 tag（全是新代码）。
+ * 所以只删引用的判据取本地侧——按远端侧判会把新建分支当成删除，白放一次推送。
+ */
 export const ZERO_OID = '0'.repeat(40)
 
 /** 首次失败后额外重试的次数。只给 1：再多就是在掩盖真失败 */
@@ -177,10 +181,25 @@ function secondsText(seconds) {
 }
 
 /**
- * 钩子环境下的仓库根：本文件在 `<root>/scripts/`，git 的 cwd 未必是仓库根，故按自身路径定位。
+ * 仓库根以 `git rev-parse --show-toplevel` 为准——git 本来就是在 work-tree 顶层执行钩子的，
+ * 把关范围要与它一致。只按「本文件在 `<root>/scripts/`」的假设定位会算错：Skill 自己那份住在
+ * `assets/scripts/` 下，据此得到的根是 assets 目录，于是拿待分发的脚本去检查模板资产，
+ * 报出一个与本项目无关的绿灯（实测发生过：本仓库的推送因此「过了」一个只跑在 assets/ 上的行数检查）。
+ * 没有 git 或不在工作树里时退回旧假设。
  */
 function repoRoot() {
-  return dirname(dirname(fileURLToPath(import.meta.url)))
+  const here = dirname(fileURLToPath(import.meta.url))
+  try {
+    const toplevel = execFileSync('git', ['rev-parse', '--show-toplevel'], {
+      cwd: here,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim()
+    if (toplevel !== '') return toplevel
+  } catch {
+    /* 取不到 git 根：按自身路径兜底 */
+  }
+  return dirname(here)
 }
 
 /** 读 git 交给钩子的 stdin；手工在终端跑时 stdin 是 TTY，读不到清单 = 走最严路径 */

@@ -157,6 +157,9 @@ function linkHooks(target) {
     execFileSync('git', ['-C', target, 'config', 'core.hooksPath', 'scripts/hooks'], { stdio: 'ignore' })
     const configured = execFileSync('git', ['-C', target, 'config', 'core.hooksPath'], { encoding: 'utf8' }).trim()
     console.log(`✅ core.hooksPath = ${configured}`)
+    // 把「接上了哪几条」念出来：只说 commit-msg 会让推送前那道全量把关没人知道它在
+    const wired = readdirSync(join(target, 'scripts/hooks')).filter((f) => !f.startsWith('.'))
+    console.log(`   本次接上的钩子：${wired.join(' / ')}`)
   } catch {
     console.log('⚠️ git 不可用，请手工执行：git config core.hooksPath scripts/hooks')
     process.exit(1)
@@ -216,8 +219,9 @@ function main() {
     placeholders += (content.match(/【待填】/g) ?? []).length
     mkdirSync(dirname(dest), { recursive: true })
     writeFileSync(dest, content, 'utf8')
-    // 钩子必须带可执行位，否则 core.hooksPath 指向它也不会被调用
-    if (destRel === 'scripts/hooks/commit-msg') chmodSync(dest, 0o755)
+    // 钩子必须带可执行位，否则 core.hooksPath 指向它也不会被调用。
+    // 按前缀判定，不要逐个列名字——漏一个就是一道只在开发机生效的把关（Windows 的 git 不看这个位）。
+    if (destRel.startsWith('scripts/hooks/')) chmodSync(dest, 0o755)
     written.push({ path: destRel, rendered: isTemplate })
   }
 
@@ -237,7 +241,7 @@ function main() {
 
   console.log('')
   console.log('下一步（脚本代不了）：')
-  console.log('  1. 启用提交信息钩子（每个克隆一次，本地配置无法提交）：')
+  console.log('  1. 启用钩子（每个克隆一次，本地配置无法提交；一次配置同时接上提交信息拦截与推送前全量把关）：')
   console.log(`     node ${join(SKILL_ROOT, 'scripts/scaffold.mjs')} --link-hooks ${target}`)
   console.log('  2. 装依赖并跑通：pnpm install && pnpm build && npx vitest run')
   console.log(`  3. 补 AGENTS.md 的【待填】章节，共 ${placeholders} 处（搜「【待填】」）——`)
