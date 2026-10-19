@@ -11,7 +11,7 @@
 - **一句话生成新仓库骨架**：`AGENTS.md`、`CHANGELOG.md`、`README.md`、`docs/`、`.gitignore`、`.env.example`，以及提交信息钩子与超长文件检查脚本。
 - **提交信息机械拦截**：`commit-msg` 钩子调用 Node 校验器，标题必须命中前缀白名单且不超 30 字符（汉字算 1 个，按 Unicode 码点计，避开 shell 按字节统计的误判）。
 - **README 同步拦截**：改了决定 README 内容的文件（`package.json`、根目录配置、`.env.example` 等，清单是脚本头可见常量）而 README.md 没进暂存区时，钩子拒绝提交；豁免标记 `[skip-docs]` 写进提交正文、随历史入库可 grep，确保快速开始永远不是谎言。
-- **给已有仓库体检上规范**：`audit` 按「文件级 / 配置级 / 执行级 / 历史级」四组输出 ✅ 已具备、⬜ 缺失、⚠️ 存在但不合规，只补缺项、不覆盖项目已有约定。文件级里含一条 `AGENTS.md` 体积检查——按 Codex `project_doc_max_bytes` 的默认预算（32 KiB，项目根到工作目录逐层合并计算）报字节数与占比，≥75% 提醒、超预算报缺失。
+- **给已有仓库体检上规范**：`audit` 按「文件级 / 执行级 / 配置级 / 历史级 / 代码健康」五组输出 ✅ 已具备、⬜ 缺失、⚠️ 存在但不合规、· 说明（如非 Node 项目跳过某些检查），只补缺项、不覆盖项目已有约定。文件级里含一条 `AGENTS.md` 体积检查——按 Codex `project_doc_max_bytes` 的默认预算（32 KiB，项目根到工作目录逐层合并计算）报字节数与占比，≥75% 提醒、超预算报缺失。
 - **可选技术栈落地**：`--stack vue-ts` 额外生成 Vue3 + TypeScript + Vite + Pinia + Element Plus 的完整配置与最小可跑入口；`--backend` 再加一个本地零依赖 Node 存储后端（不启动则前端回落 localStorage）。
 - **跨平台的行数阈值检查**：用 `.mjs` 而不是 `.ps1`，CI 与非 Windows agent 同样可跑，计行结果与行尾风格无关。
 
@@ -94,7 +94,7 @@ npx skills add iWenhao/vibe-coding-skill -g -a claude-code -y
 装好后在 agent 里说人话即可——技能正文开头有一张模式判断表，agent 读到它自己会选模式：
 
 - **新建**：「帮我新建一个项目，叫 `my-app`，是个内部工单看板，用 Vue3 栈、带个本地后端」→ 走 scaffold。四项输入（项目名 / 一句话描述 / 技术栈 / 要不要后端）缺了会**一次问齐**，不逐个追问。
-- **体检**：「给这个仓库上规范，缺什么补什么，别动我已有的约定」→ 走 audit。只补缺项、不覆盖既有约定，输出按四组给出 ✅ 已具备 / ⬜ 缺失 / ⚠️ 存在但不合规。
+- **体检**：「给这个仓库上规范，缺什么补什么，别动我已有的约定」→ 走 audit。只补缺项、不覆盖既有约定，输出按「文件级 / 执行级 / 配置级 / 历史级 / 代码健康」五组给出 ✅ 已具备 / ⬜ 缺失 / ⚠️ 存在但不合规 / · 说明。
 
 ### 不装也能用
 
@@ -118,6 +118,7 @@ node skills/project-spec/scripts/scaffold.mjs --link-hooks D:/code/my-app
 | --- | --- |
 | `--target` | 目标目录 |
 | `--name` | 项目名（kebab-case） |
+| `--title` | 生成文档里的标题，默认同 `--name` |
 | `--desc` | 一句话中文描述 |
 | `--stack` | `vue-ts`（默认）或 `none` |
 | `--backend` | 附带本地零依赖 Node 存储后端 |
@@ -136,9 +137,10 @@ skills/project-spec/            ← 一个完整的 Agent Skill，可整目录�
   SKILL.md                          入口：模式判断、操作步骤与关键取舍
   scripts/
     scaffold.mjs                    生成骨架；--stack / --backend / --link-hooks
-    audit.mjs                       四组检查的体检清单，退出码反映是否有缺失
+    audit.mjs                       五组检查的体检清单，退出码反映是否有缺失
   assets/
-    *.tpl                           AGENTS.md / CHANGELOG / README / docs / gitignore 骨架模板
+    *.tpl                           AGENTS.md / CHANGELOG / README / gitignore / .env.example 骨架模板
+    docs/                           USER_GUIDE / DEPLOY / WORKFLOW 三份文档骨架模板
     scripts/                        拷进新项目的钩子与校验脚本（提交信息、超长文件）
     stack-vue-ts/                   Vue3 + TS + Vite + Pinia 配置模板与最小入口
   references/
@@ -152,12 +154,12 @@ skills/project-spec/            ← 一个完整的 Agent Skill，可整目录�
 
 ## 约定内核
 
-写进新仓库 `AGENTS.md` 时不可缺的七节：常用命令、环境与已知坑、任务清单与进度可见性、工作流约定（分支模型 / 并行改动按「原生工作树隔离 → 手工 worktree → 同一工作树三条硬规矩」分层 / 提交前缀白名单 / 重要文件改动同步 README / 版本号只在明确发版时动 / 细节写 CHANGELOG）、代码风格（注释中文且只说「为什么」、三次必收敛、超阈值必拆）、验证节奏（默认只跑受影响的测试、按改动范围分级）、测试（单测与被测文件同目录、纯逻辑用例自带轻量环境头）。
+写进新仓库 `AGENTS.md` 时不可缺的九节：项目概述、常用命令、环境与已知坑、任务清单与进度可见性、工作流约定（分支模型 / 并行改动按「原生工作树隔离 → 手工 worktree → 同一工作树三条硬规矩」分层 / 提交前缀白名单 / 重要文件改动同步 README / 版本号只在明确发版时动 / 细节写 CHANGELOG）、架构与扩展点（脚手架生成不了、必须人工填，是 `audit` 会报缺失的一节）、代码风格（注释中文且只说「为什么」、三次必收敛、超阈值必拆）、验证节奏（默认只跑受影响的测试、按改动范围分级）、测试（单测与被测文件同目录、纯逻辑用例自带轻量环境头）。
 
 主文件按**字节**有外部预算：Codex 默认把「项目根 → 工作目录」这条链上所有 `AGENTS.md` 合并算 32 KiB，拼满就不再加载更靠近工作目录的那份（整份进不来，不是尾部截断）。所以模板只留每轮都要用的事实，「读代码能自证」的不写；细则外置到同仓库 `docs/` 并标注何时必读——**不能挪进本 Skill 的 `references/`**，那份不随生成的仓库走。已经外置的三块低频细则（并行改动的隔离方式怎么选、版本号进位与 YYMMDD 后缀、发版前重复扫描）就落在产物 `docs/WORKFLOW.md` 里，而「绝不 `git add -A`」「平时提交不动版本号」这类每轮都要守的硬规矩留在主文件——挪走等于没有，agent 不会为一条它不知道存在的规则去翻文档。
 
 提交前缀白名单：`功能` `修复` `优化` `重构` `清理` `文档` `测试` `构建` `发版`。
-行数阈值：`*.vue` `*.ts` `*.tsx` `*.js` `*.mjs` 400 行，`*.scss` `*.css` 500 行。
+行数阈值：`*.vue` `*.ts` `*.tsx` `*.js` `*.mjs` `*.cjs` 400 行，`*.scss` `*.css` 500 行。
 
 ## 边界
 

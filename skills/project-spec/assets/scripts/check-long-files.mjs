@@ -3,7 +3,7 @@
  *
  * 用途：AGENTS.md「收尾硬性检查」要求的自检脚本，也是 CI 与提交前手动把关的入口。
  *       （刻意不挂成 pre-commit——历史欠账会挡住所有无关提交，见 AGENTS.md「收尾硬性检查」。）
- * 阈值按扩展名区分（与 AGENTS.md 约定一致）：*.vue / *.ts / *.tsx / *.js / *.mjs = 400 行，*.scss / *.css = 500 行。
+ * 阈值按扩展名区分（与 AGENTS.md 约定一致）：*.vue / *.ts / *.tsx / *.js / *.mjs / *.cjs = 400 行，*.scss / *.css = 500 行。
  *
  * 用法（在仓库根目录执行）：
  *   node scripts/check-long-files.mjs
