@@ -39,7 +39,7 @@ node <skill-dir>/scripts/scaffold.mjs \
 
 可选：`--dev-port 5173` `--api-port 5174` `--force`（目标目录已有同名文件时默认跳过并告警，`--force` 才覆盖）。
 
-产物：`AGENTS.md` `CHANGELOG.md` `README.md` `docs/{USER_GUIDE,DEPLOY,WORKFLOW}.md` `.gitignore` `.env.example`、`scripts/{commit-msg-check.mjs,check-long-files.mjs,hooks/commit-msg}`，`--stack vue-ts` 时再加 `package.json` `tsconfig*.json` `vite.config.ts` `vitest.config.ts` `eslint.config.js` `pnpm-workspace.yaml` 与 `src/` 最小可跑入口。
+产物：`AGENTS.md` `CHANGELOG.md` `README.md` `docs/{USER_GUIDE,DEPLOY,TESTING,WORKFLOW}.md` `.gitignore` `.env.example`、`scripts/{commit-msg-check.mjs,commit-msg-check.test.ts,pre-push-check.mjs,pre-push-check.test.ts,check-long-files.mjs,hooks/{commit-msg,pre-push}}`（钩子文件统一带 0755），`--stack vue-ts` 时再加 `package.json` `tsconfig*.json` `vite.config.ts` `vitest.config.ts` `eslint.config.js` `pnpm-workspace.yaml` 与 `src/` 最小可跑入口；加 `--backend` 时再加 `server/**`（含 `server/lib/`）与 `src/api/`。
 
 **第 3 步——脚本生成不了的两节，必须人工补**，否则 AGENTS.md 只是空壳：
 
@@ -68,7 +68,16 @@ node <target>/scripts/commit-msg-check.mjs ../msg-probe.txt; echo "exit=$?"
 
 期望 `exit=1` 并报「标题 33 字符，超出上限 30 字符」（这条是实测过的，正好命中超长分支——顺带写带前缀但不超长的样例只会命中「未知前缀」，测不到长度那道）。验证完删掉 `msg-probe.txt`。绿灯不代表脚本正确，**红灯才代表**。
 
-文档同步拦截同法验证：在仓库里改一行 `package.json` 并 `git add`（不动 README），跑 `node <target>/scripts/commit-msg-check.mjs <合法信息文件>`，期望 `exit=1` 且报「重要文件改动但 README.md 未同步」；再往信息文件加一行 `[skip-docs]` 重跑，期望 `exit=0`。两条都红绿分明才算装好。
+文档同步拦截同法验证——它是**成对规则**（`DOC_SYNC_RULES`，一组改动文件配一份该同步的文档），每条规则都要见红：改一行 `package.json` 并 `git add`（不动 README），跑 `node <target>/scripts/commit-msg-check.mjs <合法信息文件>`，期望 `exit=1` 且报「`package.json` 改动但 README.md 未同步」；带后端时再改一行 `server/index.mjs` 并 `git add`（不动 `docs/DEPLOY.md`），期望 `exit=1` 且报「docs/DEPLOY.md 未同步」；把 `docs/DEPLOY.md` 一起 `git add` 重跑，期望 `exit=0`；再往信息文件加一行 `[skip-docs]`，期望 `exit=0`。每条都红绿分明才算装好——只测 README 那条，接口文档那道坏了也不会被发现。
+
+推送前那道全量把关（`scripts/hooks/pre-push`）同样要见红才算装上。**`git push --dry-run` 也会触发钩子**（实测），所以验它不必真的把改动推出去，也不需要本地起服务：
+
+```bash
+git init --bare ../probe-remote.git && git remote add origin ../probe-remote.git
+git push --dry-run origin <分支>     # 应看到 [pre-push] 1/4 全量测试 …，全绿约 12 秒
+```
+
+想验「真能中止」：临时加一个带类型错误的 `.ts` 文件并提交一次，再跑上面的 dry-run——期望它在「构建（含 vue-tsc 类型检查）」那一步连续两次失败后打印 `[pre-push] ❌ 推送中止` 并以非 0 退出（其余步骤照常通过，说明清单逐步在跑）。验完删探针文件与其提交、`rm -rf ../probe-remote.git`、`git remote remove origin`。**钩子的可执行位在这台 Windows 机器上验不出来**：git for Windows 不看 x 位，`statSync` 的 mode 又一律报 `0666`，所以 scaffold 里那句 chmod 只能靠代码路径保证、`audit` 在非 win32 平台才检查它——别因为在 Windows 上「推得动」就断定 Linux/CI 上也推得动。
 
 ## 模式二：给已有项目上规范
 
@@ -99,9 +108,9 @@ node <skill-dir>/scripts/audit.mjs [目标目录，默认当前]
 2. **常用命令**——只列命令，门槛指向「验证节奏」，两处不重复。
 3. **环境与已知坑**——仓库属性 vs `〔本机〕` 分开标注，换机器不照搬。
 4. **任务清单与进度可见性**——多步任务必须有对用户可见的清单，开工与收尾各附一份。
-5. **工作流约定**——分支模型、一个功能一个提交、并行改动按「原生工作树隔离 → 手工 worktree → 同工作树三条硬规矩」分层、提交信息前缀白名单 + 标题 ≤30 **字符**（汉字算 1）、细节写 CHANGELOG、重要文件改动同轮同步 README（钩子拦截）、版本号只在明确发版时动。其中「怎么开工作树、版本号怎么进位」这类**只在某一轮用得上**的细则外置到 `docs/WORKFLOW.md`，主文件留硬规矩加触发条件——每轮都要守的那半句（绝不 `git add -A`、平时不动版本号）**不能挪**。
+5. **工作流约定**——分支模型、一个功能一个提交、并行改动按「原生工作树隔离 → 手工 worktree → 同工作树三条硬规矩」分层、提交信息前缀白名单 + 标题 ≤30 **字符**（汉字算 1）、细节写 CHANGELOG、重要文件改动同轮同步对应文档（README / 接口码表，钩子按成对规则拦截）、版本号只在明确发版时动。其中「怎么开工作树、版本号怎么进位」这类**只在某一轮用得上**的细则外置到 `docs/WORKFLOW.md`，主文件留硬规矩加触发条件——每轮都要守的那半句（绝不 `git add -A`、平时不动版本号）**不能挪**。
 6. **架构与扩展点**——AGENTS.md 里唯一不能靠模板生成、价值最高的一节，给高频改动「照哪个文件抄格式 + 分几步注册 + 同步哪些文档」的具体路径；必须人工填，缺这节 `audit` 会报 ⬜。
-7. **代码风格**——注释中文且只说「为什么」；先找现成的、**三次必收敛**；超阈值必拆。对外暴露端点时再加一条**接口响应约定**：形状只有两种（成功=数据+可选元信息 / 失败=错误码+人读文案）、判据只有状态码、服务端出口与前端入口各唯一、**调用方只比错误码不比文案**，逐端点码表外置到 `docs/DEPLOY.md`。
+7. **代码风格**——注释中文且只说「为什么」；先找现成的、**三次必收敛**；超阈值必拆。对外暴露端点时再加一条**接口响应约定**：主文件只留硬规矩（形状只有两种：成功=数据+可选元信息 / 失败=错误码+人读文案；判据只有状态码；服务端出口与前端入口各唯一；**调用方只比错误码不比文案**）与「新增端点先读 DEPLOY」的触发条件，全文细则与逐端点码表外置到 `docs/DEPLOY.md`——这条外置由 `DOC_SYNC_RULES` 的成对规则兜住（改 `server/**`、`src/api/**` 不同步码表就拒绝提交）。
 8. **验证节奏**——默认动作是「跑受影响的测试」而不是全量（受限环境里全量的绿灯本身可能不可信），按改动范围分级的表格，含「用户可见输出必须真跑一次」这条优先级最高的例外。
 9. **测试**——单测放被测文件同目录；核心逻辑补测，UI 不强求但改 UI 要浏览器实测；纯逻辑用例自己声明轻量环境，别一律吃浏览器模拟环境。
 
@@ -111,7 +120,7 @@ node <skill-dir>/scripts/audit.mjs [目标目录，默认当前]
 
 生成或补齐前先照这几条判断，别机械照搬源仓库：
 
-- **机械拦截优先**：提交信息、README 同步与文件行数都做成脚本 + 钩子，文字约定只解释「为什么」。检查脚本存在但没接钩子 = 约定没生效（audit 的「执行级」专查这个）。
+- **机械拦截优先**：提交信息、文档同步与文件行数都做成脚本 + 钩子，文字约定只解释「为什么」。检查脚本存在但没接钩子 = 约定没生效（audit 的「执行级」专查这个）。
 - **Windows 坑用 Node 替 PowerShell**：本 Skill 的行数检查是 `check-long-files.mjs`，不是原仓库的 `.ps1`。理由：不依赖 PS 5.1 的 ANSI 代码页（`.ps1` 无 BOM 会 ParserError）、CI 与非 Windows agent 可跑、计行与行尾风格无关。
 - **`AGENTS.md` 只装「每轮都要用」的规则，并按字节算预算**：Codex 的 `project_doc_max_bytes` 默认把「项目根 → 工作目录」这条链上所有 AGENTS.md **合并**算 32 KiB，拼满就不再加载更靠近工作目录的那份（是整份进不来，不是尾部截断）。细则只能挪进同仓库 `docs/` 并写明何时必读，**不能挪进本 Skill 的 `references/`**——references 不随生成的仓库走，挪过去等于内容消失。`audit` 按这份预算报字节与占比，体积因此是看得见的数字。
 - **不生成领域代码**：本 Skill 只造「规范 + 骨架」。渲染引擎、图形元素注册、数据源适配器这类业务实现属于源仓库自身，别往新项目里塞。
@@ -122,11 +131,14 @@ node <skill-dir>/scripts/audit.mjs [目标目录，默认当前]
 
 ## Resources
 
-- [references/conventions-kernel.md](references/conventions-kernel.md)——栈无关约定内核全文（提交/README 同步/版本/CHANGELOG/并行改动隔离/接口响应信封/防重复/拆分/进度清单/验证分级/测试）。
+- [references/conventions-kernel.md](references/conventions-kernel.md)——栈无关约定内核全文（提交/文档同步/版本/CHANGELOG/并行改动隔离/接口响应信封/防重复/拆分/进度清单/验证分级/测试）。
 - [references/stack-vue-ts.md](references/stack-vue-ts.md)——Vue3 + TS + Vite + Pinia 落地细节与配置逐项理由。
 - [references/pitfalls.md](references/pitfalls.md)——「环境与已知坑」一节的写法规约与通用条目。
 - `scripts/scaffold.mjs`——生成骨架，支持 `--stack vue-ts|none`、`--backend`、`--link-hooks`。
 - `scripts/audit.mjs`——五组检查的体检清单，退出码反映是否有缺失。
-- `scripts/check-long-files.mjs`——跨平台行数阈值检查（被 audit 复用，单一来源）。
-- `scripts/commit-msg-check.mjs`——提交信息校验 + 文档同步检查（纯函数 + CLI），前缀白名单、长度与 `DOC_SYNC_PATTERNS` 在文件头常量。
+- `scripts/repo-facts.mjs`——audit 的事实探测层（读文件、走目录、判语言、跑 git、加载目标仓库自己的校验器）；**只探不判**，所有 ⬜/⚠️ 判定留在 audit.mjs。
+- `scripts/hook-gates.test.mjs`——本仓库对自己两道闸门（提交信息 + 推送前把关）做的自测（`node --test "skills/project-spec/scripts/*.test.mjs"`），零第三方依赖。
+- `assets/scripts/check-long-files.mjs`——跨平台行数阈值检查（拷进生成的仓库，audit 从目标仓库加载它复用同一套阈值逻辑）。
+- `assets/scripts/commit-msg-check.mjs`——提交信息校验 + 文档同步检查（纯函数 + CLI），前缀白名单、长度与 `DOC_SYNC_RULES` 在文件头常量；`DOC_SYNC_RULES` 是**成对规则**（一组改动文件 → 该同步的那份文档），新增一类「改了代码必须同步文档」的约定时往里加一条，不要另写一个检查器。
+- `assets/scripts/pre-push-check.mjs`——推送前全量把关（测试/构建/服务端类型/行数四步，失败自动重试一次），由 `assets/scripts/hooks/pre-push` 调用；**步骤清单以它为准**，AGENTS.md 与内核的验证节奏表只是它的镜像。仓库根按 `git rev-parse --show-toplevel` 定位（与 git 执行钩子的目录一致），纯函数由同目录的 `pre-push-check.test.ts` 覆盖。
 - `assets/`——`AGENTS.md.tpl` 等骨架模板与 `stack-vue-ts/` 配置模板；只在 scaffold 时读取，不必预先加载进上下文。

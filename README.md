@@ -8,9 +8,10 @@
 
 ## 功能特性
 
-- **一句话生成新仓库骨架**：`AGENTS.md`、`CHANGELOG.md`、`README.md`、`docs/`、`.gitignore`、`.env.example`，以及提交信息钩子与超长文件检查脚本。
+- **一句话生成新仓库骨架**：`AGENTS.md`、`CHANGELOG.md`、`README.md`、`docs/`、`.gitignore`、`.env.example`，以及提交信息钩子、推送前把关钩子与超长文件检查脚本。
 - **提交信息机械拦截**：`commit-msg` 钩子调用 Node 校验器，标题必须命中前缀白名单且不超 30 字符（汉字算 1 个，按 Unicode 码点计，避开 shell 按字节统计的误判）。
-- **README 同步拦截**：改了决定 README 内容的文件（`package.json`、根目录配置、`.env.example` 等，清单是脚本头可见常量）而 README.md 没进暂存区时，钩子拒绝提交；豁免标记 `[skip-docs]` 写进提交正文、随历史入库可 grep，确保快速开始永远不是谎言。
+- **文档同步拦截**：`DOC_SYNC_RULES` 是**成对规则**——命中某条规则的文件被改动、而那条规则要求的那份文档没进暂存区时，钩子拒绝提交。默认两条：`package.json`、根目录 `*.config.*`、`tsconfig*`、`.env.example`、`pnpm-workspace.yaml` → `README.md`；`server/**`、`src/api/**` → `docs/DEPLOY.md` 的「接口错误码」。规则清单是脚本头可见常量，按项目增删；豁免标记 `[skip-docs]` 写进提交正文、随历史入库可 grep，确保快速开始与码表都不会变成谎言。
+- **推送前全量把关**：`pre-push` 钩子调用 `pre-push-check.mjs` 跑「全量测试 → 构建（含类型检查）→ 服务端类型 → 行数检查」，任一步失败自动重试一次、仍失败即中止推送；只推 tag 或只删远端引用时跳过，不为没有新代码的推送白等几分钟。清单里不含 lint——全量 lint 会被既有报警淹没，它留在「只跑改动文件」那一档。
 - **给已有仓库体检上规范**：`audit` 按「文件级 / 执行级 / 配置级 / 历史级 / 代码健康」五组输出 ✅ 已具备、⬜ 缺失、⚠️ 存在但不合规、· 说明（如非 Node 项目跳过某些检查），只补缺项、不覆盖项目已有约定。文件级里含一条 `AGENTS.md` 体积检查——按 Codex `project_doc_max_bytes` 的默认预算（32 KiB，项目根到工作目录逐层合并计算）报字节数与占比，≥75% 提醒、超预算报缺失。
 - **可选技术栈落地**：`--stack vue-ts` 额外生成 Vue3 + TypeScript + Vite + Pinia + Element Plus 的完整配置与最小可跑入口；`--backend` 再加一个本地零依赖 Node 存储后端（不启动则前端回落 localStorage）。
 - **跨平台的行数阈值检查**：用 `.mjs` 而不是 `.ps1`，CI 与非 Windows agent 同样可跑，计行结果与行尾风格无关。
@@ -111,6 +112,15 @@ node skills/project-spec/scripts/scaffold.mjs --link-hooks D:/code/my-app
 
 生成后 `core.hooksPath` 是**每个克隆执行一次**的本地配置，无法随仓库提交——这一点会写进生成项目的 `AGENTS.md`。
 
+本仓库自己也吃这套狗粮：执行 `git config core.hooksPath skills/project-spec/assets/scripts/hooks` 后，这里的提交由自己发布的校验器把关。证红用 `git commit --allow-empty -m "<超 30 字的标题>"`——不合规则提交根本不产生，合规时才多一个空提交（实测：超长标题与未知前缀各被拒一次，退出码 1，`git log -1` 仍是原 HEAD）。`pre-push` 在这仓库打印「本仓库没有可执行的把关步骤」后放行：这里没有根 `package.json`，跑不了测试与构建，它不假装跑过任何一步。**根定位准不准就是这类假绿灯的来源**——脚本若按「自己住在 `<root>/scripts/`」猜根，在本仓库会猜到 `assets/`，于是拿待分发的行数检查去扫模板资产并报绿；现在它问 `git rev-parse --show-toplevel`，与 git 执行钩子的工作目录一致。本仓库真正的推送前把关是上面那两条命令。
+
+关掉这份拦截：`git config --unset core.hooksPath`。自测（零依赖，用 Node 自带测试运行器）：
+
+```bash
+node --test "skills/project-spec/scripts/*.test.mjs"
+node skills/project-spec/assets/scripts/check-long-files.mjs --roots skills   # 本仓库自己的超长文件检查
+```
+
 
 ## scaffold 参数
 
@@ -133,15 +143,18 @@ node skills/project-spec/scripts/scaffold.mjs --link-hooks D:/code/my-app
 ```
 README.md
 LICENSE                             MIT
+.gitignore                          依赖/产物/探针目录 + Windows 保留设备名
 skills/project-spec/            ← 一个完整的 Agent Skill，可整目录拷走
   SKILL.md                          入口：模式判断、操作步骤与关键取舍
   scripts/
     scaffold.mjs                    生成骨架；--stack / --backend / --link-hooks
     audit.mjs                       五组检查的体检清单，退出码反映是否有缺失
+    repo-facts.mjs                  audit 的事实探测层（读文件 / 走目录 / 判语言 / 跑 git），只探不判
+    hook-gates.test.mjs             本仓库自测（提交闸门 + 推送把关的纯函数）：node --test "skills/project-spec/scripts/*.test.mjs"
   assets/
     *.tpl                           AGENTS.md / CHANGELOG / README / gitignore / .env.example 骨架模板
-    docs/                           USER_GUIDE / DEPLOY / WORKFLOW 三份文档骨架模板
-    scripts/                        拷进新项目的钩子与校验脚本（提交信息、超长文件）
+    docs/                           USER_GUIDE / DEPLOY / TESTING / WORKFLOW 四份文档骨架模板
+    scripts/                        拷进新项目的钩子与校验脚本（提交信息、超长文件、推送前全量把关）
     stack-vue-ts/                   Vue3 + TS + Vite + Pinia 配置模板与最小入口
   references/
     conventions-kernel.md           栈无关约定内核全文
@@ -154,9 +167,9 @@ skills/project-spec/            ← 一个完整的 Agent Skill，可整目录�
 
 ## 约定内核
 
-写进新仓库 `AGENTS.md` 时不可缺的九节：项目概述、常用命令、环境与已知坑、任务清单与进度可见性、工作流约定（分支模型 / 并行改动按「原生工作树隔离 → 手工 worktree → 同一工作树三条硬规矩」分层 / 提交前缀白名单 / 重要文件改动同步 README / 版本号只在明确发版时动 / 细节写 CHANGELOG）、架构与扩展点（脚手架生成不了、必须人工填，是 `audit` 会报缺失的一节）、代码风格（注释中文且只说「为什么」、三次必收敛、超阈值必拆）、验证节奏（默认只跑受影响的测试、按改动范围分级）、测试（单测与被测文件同目录、纯逻辑用例自带轻量环境头）。
+写进新仓库 `AGENTS.md` 时不可缺的九节：项目概述、常用命令、环境与已知坑、任务清单与进度可见性、工作流约定（分支模型 / 并行改动按「原生工作树隔离 → 手工 worktree → 同一工作树三条硬规矩」分层 / 提交前缀白名单 / 重要文件改动同步对应文档（成对规则：配置类 → README，服务端与请求入口 → 接口码表） / 版本号只在明确发版时动 / 细节写 CHANGELOG）、架构与扩展点（脚手架生成不了、必须人工填，是 `audit` 会报缺失的一节）、代码风格（注释中文且只说「为什么」、三次必收敛、超阈值必拆）、验证节奏（默认只跑受影响的测试、按改动范围分级）、测试（单测与被测文件同目录、纯逻辑用例自带轻量环境头）。
 
-主文件按**字节**有外部预算：Codex 默认把「项目根 → 工作目录」这条链上所有 `AGENTS.md` 合并算 32 KiB，拼满就不再加载更靠近工作目录的那份（整份进不来，不是尾部截断）。所以模板只留每轮都要用的事实，「读代码能自证」的不写；细则外置到同仓库 `docs/` 并标注何时必读——**不能挪进本 Skill 的 `references/`**，那份不随生成的仓库走。已经外置的三块低频细则（并行改动的隔离方式怎么选、版本号进位与 YYMMDD 后缀、发版前重复扫描）就落在产物 `docs/WORKFLOW.md` 里，而「绝不 `git add -A`」「平时提交不动版本号」这类每轮都要守的硬规矩留在主文件——挪走等于没有，agent 不会为一条它不知道存在的规则去翻文档。
+主文件按**字节**有外部预算：Codex 默认把「项目根 → 工作目录」这条链上所有 `AGENTS.md` 合并算 32 KiB，拼满就不再加载更靠近工作目录的那份（整份进不来，不是尾部截断）。所以模板只留每轮都要用的事实，「读代码能自证」的不写；细则外置到同仓库 `docs/` 并标注何时必读——**不能挪进本 Skill 的 `references/`**，那份不随生成的仓库走。已经外置的低频细则：`docs/WORKFLOW.md`——并行改动的隔离方式怎么选、版本号进位与 YYMMDD 后缀、发版前重复扫描；`docs/DEPLOY.md`——接口响应形状全文与逐端点错误码表；`docs/TESTING.md`——测试环境选择、打桩、全量结果的可信判据与重跑修法。外置的前提是**那一轮有闸门或触发条件**：码表敢挪出主文件，是因为 `DOC_SYNC_RULES` 会在改了 `server/**` 却没同步 `docs/DEPLOY.md` 时拒绝提交。而「绝不 `git add -A`」「平时提交不动版本号」这类每轮都要守的硬规矩留在主文件——挪走等于没有，agent 不会为一条它不知道存在的规则去翻文档。
 
 提交前缀白名单：`功能` `修复` `优化` `重构` `清理` `文档` `测试` `构建` `发版`。
 行数阈值：`*.vue` `*.ts` `*.tsx` `*.js` `*.mjs` `*.cjs` 400 行，`*.scss` `*.css` 500 行。

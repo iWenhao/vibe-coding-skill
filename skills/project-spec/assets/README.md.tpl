@@ -28,7 +28,7 @@ npx vitest run    # 单次跑测试（pnpm test 是 watch 模式）
 pnpm build        # 生产构建 = 类型检查 + 打包
 ```
 
-启用提交信息校验钩子（每个克隆执行一次，本地配置、无法随仓库提交）：
+启用钩子（每个克隆执行一次，是本地配置、无法随仓库提交）。一条命令同时接上两条钩子：`commit-msg` 拦提交信息与「重要文件动了而 README 没同步」，`pre-push` 在推送前自动跑全量把关（全量测试 + 类型检查 + 构建 + 行数检查，任一步失败即中止）：
 
 ```bash
 git config core.hooksPath scripts/hooks
