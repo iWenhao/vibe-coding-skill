@@ -52,7 +52,11 @@ function includeFile(rel, vars) {
   if (isStack && vars.STACK !== 'vue-ts') return null
   const withoutPrefix = isStack ? rel.slice('stack-vue-ts/'.length) : rel
   const destRel = targetName(withoutPrefix)
-  if (!vars.BACKEND && (destRel === 'tsconfig.server.json' || destRel.startsWith('server/'))) {
+  // 后端专属三处：服务端目录、服务端类型检查配置，以及前端那层请求封装——
+  // 没有后端就没有信封可拆，生成一份没人调用的 client.ts 只是让新仓库多一个死文件
+  const backendOnly =
+    destRel === 'tsconfig.server.json' || destRel.startsWith('server/') || destRel.startsWith('src/api/')
+  if (!vars.BACKEND && backendOnly) {
     return null
   }
   return destRel
