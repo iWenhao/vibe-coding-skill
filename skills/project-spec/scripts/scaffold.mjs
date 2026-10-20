@@ -5,6 +5,7 @@
  * 用法：
  *   node scripts/scaffold.mjs --target D:/code/my-app --name my-app --desc "内部工单看板" \
  *        [--stack vue-ts|none] [--backend] [--dev-port 5173] [--api-port 5174] [--force]
+ *        （--backend 仅能与 --stack vue-ts 搭配：none 没有承载它的前端请求层与构建脚本）
  *   node scripts/scaffold.mjs --link-hooks D:/code/my-app     # 单独启用提交信息钩子
  *
  * 设计约束：
@@ -59,6 +60,10 @@ function includeFile(rel, vars) {
   if (!vars.BACKEND && backendOnly) {
     return null
   }
+  // 下面两类文件只对 Vue 栈有意义：none 没有构建期环境变量，也没有 vitest/TypeScript 运行时，
+  // 生成过去只会留下打不开的死配置与跑不了的死测试。
+  if (!vars.VUE_TS && destRel === '.env.example') return null
+  if (!vars.VUE_TS && destRel.endsWith('.test.ts')) return null
   return destRel
 }
 
@@ -196,6 +201,11 @@ function main() {
     console.log(`⚠️ --stack 只支持 vue-ts 或 none，收到 ${vars.STACK}`)
     process.exit(2)
   }
+  if (vars.STACK === 'none' && vars.BACKEND) {
+    console.log('⚠️ --backend 需要与 --stack vue-ts 搭配：后端的前端请求封装、构建脚本与服务端类型检查都随 Vue 栈生成；')
+    console.log('   --stack none 只会留下文档和一个没有前端调用的服务端。请去掉 --backend，或改用 --stack vue-ts。')
+    process.exit(2)
+  }
 
   mkdirSync(target, { recursive: true })
 
@@ -232,7 +242,11 @@ function main() {
     .map((item) => item.path)
 
   console.log(`项目骨架 → ${target}`)
-  console.log(`  栈=${vars.STACK} 后端=${vars.BACKEND ? '有' : '无'} 端口=${vars.DEV_PORT}${vars.BACKEND ? `/${vars.API_PORT}` : ''}`)
+  if (vars.VUE_TS) {
+    console.log(`  栈=${vars.STACK} 后端=${vars.BACKEND ? '有' : '无'} 端口=${vars.DEV_PORT}${vars.BACKEND ? `/${vars.API_PORT}` : ''}`)
+  } else {
+    console.log('  栈=none（无内置技术栈；只生成规范、钩子与检查脚本）')
+  }
   for (const item of written) console.log(`  + ${item.path}`)
   for (const destRel of skipped) console.log(`  = ${destRel}（已存在，跳过；--force 才覆盖）`)
   if (leftovers.length > 0) {
@@ -243,7 +257,11 @@ function main() {
   console.log('下一步（脚本代不了）：')
   console.log('  1. 启用钩子（每个克隆一次，本地配置无法提交；一次配置同时接上提交信息拦截与推送前全量把关）：')
   console.log(`     node ${join(SKILL_ROOT, 'scripts/scaffold.mjs')} --link-hooks ${target}`)
-  console.log('  2. 装依赖并跑通：pnpm install && pnpm build && npx vitest run')
+  if (vars.VUE_TS) {
+    console.log('  2. 装依赖并跑通：pnpm install && pnpm build && npx vitest run')
+  } else {
+    console.log('  2. 按 AGENTS.md「常用命令」补齐本栈的安装/开发/构建/测试命令（当前是【待填】），并真跑一次')
+  }
   console.log(`  3. 补 AGENTS.md 的【待填】章节，共 ${placeholders} 处（搜「【待填】」）——`)
   console.log('     其中「架构与扩展点」与「环境与已知坑」必须人工写，脚手架编不出来')
   console.log('  4. 验证钩子真的会拒绝不合规提交（见 SKILL.md 模式一第 5 步），别只看绿灯')

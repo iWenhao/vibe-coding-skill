@@ -27,7 +27,7 @@ argument-hint: <新项目目录> | audit [已有项目目录]
 
 ## 模式一：新建项目骨架
 
-**第 1 步——凑齐 4 个输入，缺的一次问完**（不要逐个追问）：项目名（kebab-case）、一句话中文描述、技术栈（`vue-ts` 或 `none`）、有没有本地零依赖后端（决定 `--backend`）。
+**第 1 步——凑齐 4 个输入，缺的一次问完**（不要逐个追问）：项目名（kebab-case）、一句话中文描述、技术栈（`vue-ts` 或 `none`）、有没有本地零依赖后端（决定 `--backend`，**仅 `vue-ts` 可选**——`none` 没有承载它的前端请求层与构建脚本，组合会被脚本拒绝）。
 
 **第 2 步——生成**：
 
@@ -37,9 +37,9 @@ node <skill-dir>/scripts/scaffold.mjs \
   --stack vue-ts --backend
 ```
 
-可选：`--dev-port 5173` `--api-port 5174` `--force`（目标目录已有同名文件时默认跳过并告警，`--force` 才覆盖）。
+可选：`--dev-port 5173` `--api-port 5174` `--force`（目标目录已有同名文件时默认跳过并告警，`--force` 才覆盖）。`--backend` 与 `--stack none` 互斥，脚本会在写入任何文件之前拒绝。
 
-产物：`AGENTS.md` `CHANGELOG.md` `README.md` `docs/{USER_GUIDE,DEPLOY,TESTING,WORKFLOW}.md` `.gitignore` `.env.example`、`scripts/{commit-msg-check.mjs,commit-msg-check.test.ts,pre-push-check.mjs,pre-push-check.test.ts,check-long-files.mjs,hooks/{commit-msg,pre-push}}`（钩子文件统一带 0755），`--stack vue-ts` 时再加 `package.json` `tsconfig*.json` `vite.config.ts` `vitest.config.ts` `eslint.config.js` `pnpm-workspace.yaml` 与 `src/` 最小可跑入口；加 `--backend` 时再加 `server/**`（含 `server/lib/`）与 `src/api/`。
+产物：`AGENTS.md` `CHANGELOG.md` `README.md` `docs/{USER_GUIDE,DEPLOY,TESTING,WORKFLOW}.md` `.gitignore`、`scripts/{commit-msg-check.mjs,pre-push-check.mjs,check-long-files.mjs,hooks/{commit-msg,pre-push}}`（钩子文件统一带 0755），`--stack vue-ts` 时再加 `package.json` `tsconfig*.json` `vite.config.ts` `vitest.config.ts` `eslint.config.js` `pnpm-workspace.yaml` `.env.example`、`scripts/{commit-msg-check,pre-push-check}.test.ts` 与 `src/` 最小可跑入口；加 `--backend` 时再加 `server/**`（含 `server/lib/`）与 `src/api/`。`--stack none` 只出规范、钩子与检查脚本，不生成 `package.json`、前端源码、`.env.example` 或跑不了的 `.test.ts`。
 
 **第 3 步——脚本生成不了的两节，必须人工补**，否则 AGENTS.md 只是空壳：
 
@@ -51,11 +51,12 @@ node <skill-dir>/scripts/scaffold.mjs \
 ```bash
 git init
 node <skill-dir>/scripts/scaffold.mjs --link-hooks <target>   # 或手工 git config core.hooksPath scripts/hooks
+# --stack vue-ts 时继续：
 pnpm install
 pnpm build && npx vitest run
 ```
 
-`core.hooksPath` 是**每个克隆执行一次**的本地配置，不能提交代替；这一点必须在 AGENTS.md 与汇报里都说清。
+`--stack none` 没有内置技术栈，跳过安装/构建，按生成的 AGENTS.md「常用命令」补齐本栈命令后真跑一次。`core.hooksPath` 是**每个克隆执行一次**的本地配置，不能提交代替；这一点必须在 AGENTS.md 与汇报里都说清。
 
 **第 5 步——验证钩子真的会拦截**（不验证就等于没装）：
 
@@ -68,16 +69,45 @@ node <target>/scripts/commit-msg-check.mjs ../msg-probe.txt; echo "exit=$?"
 
 期望 `exit=1` 并报「标题 33 字符，超出上限 30 字符」（这条是实测过的，正好命中超长分支——顺带写带前缀但不超长的样例只会命中「未知前缀」，测不到长度那道）。验证完删掉 `msg-probe.txt`。绿灯不代表脚本正确，**红灯才代表**。
 
-文档同步拦截同法验证——它是**成对规则**（`DOC_SYNC_RULES`，一组改动文件配一份该同步的文档），每条规则都要见红：改一行 `package.json` 并 `git add`（不动 README），跑 `node <target>/scripts/commit-msg-check.mjs <合法信息文件>`，期望 `exit=1` 且报「`package.json` 改动但 README.md 未同步」；带后端时再改一行 `server/index.mjs` 并 `git add`（不动 `docs/DEPLOY.md`），期望 `exit=1` 且报「docs/DEPLOY.md 未同步」；把 `docs/DEPLOY.md` 一起 `git add` 重跑，期望 `exit=0`；再往信息文件加一行 `[skip-docs]`，期望 `exit=0`。每条都红绿分明才算装好——只测 README 那条，接口文档那道坏了也不会被发现。
+文档同步拦截同法验证——它是**成对规则**（`DOC_SYNC_RULES`，一组改动文件配一份该同步的文档），每条规则都要见红。直接在生成仓库里改文件再 `git add` 会污染它的暂存区，而且未修改的文档 `git add` 不会进暂存 diff；改用一个临时探针仓库，两条规则一次验完：
+
+```bash
+probe=$(mktemp -d) && cd "$probe" && git init -q
+git config user.email probe@example.com && git config user.name probe
+cp <target>/scripts/commit-msg-check.mjs .
+mkdir -p server docs
+echo '{}' > package.json; echo '# readme' > README.md
+echo '// server' > server/index.mjs; echo '# deploy' > docs/DEPLOY.md
+git add . && git commit -qm "构建: 验证用初始提交"
+node -e "require('fs').writeFileSync('msg.txt','功能: 验证文档同步\n')"
+
+echo >> package.json; echo >> server/index.mjs
+git add package.json server/index.mjs
+node commit-msg-check.mjs msg.txt; echo "exit=$?"   # 期望 1：README.md 与 docs/DEPLOY.md 都报未同步
+
+echo >> README.md; echo >> docs/DEPLOY.md
+git add README.md docs/DEPLOY.md
+node commit-msg-check.mjs msg.txt; echo "exit=$?"   # 期望 0：两条规则都满足
+
+node -e "require('fs').appendFileSync('msg.txt','\n[skip-docs]\n')"
+git restore --staged README.md docs/DEPLOY.md
+node commit-msg-check.mjs msg.txt; echo "exit=$?"   # 期望 0：豁免放行且提示可见
+
+cd - && rm -rf "$probe"
+```
+
+每条规则都红绿分明才算装好——只测 README 那条，接口文档那道坏了也不会被发现。探针仓库用完即删，生成仓库的暂存区与工作树保持原样。
 
 推送前那道全量把关（`scripts/hooks/pre-push`）同样要见红才算装上。**`git push --dry-run` 也会触发钩子**（实测），所以验它不必真的把改动推出去，也不需要本地起服务：
 
 ```bash
 git init --bare ../probe-remote.git && git remote add origin ../probe-remote.git
-git push --dry-run origin <分支>     # 应看到 [pre-push] 1/4 全量测试 …，全绿约 12 秒
+git push --dry-run origin <分支>     # 应看到 [pre-push] 全量清单，全绿约十几秒
 ```
 
-想验「真能中止」：临时加一个带类型错误的 `.ts` 文件并提交一次，再跑上面的 dry-run——期望它在「构建（含 vue-tsc 类型检查）」那一步连续两次失败后打印 `[pre-push] ❌ 推送中止` 并以非 0 退出（其余步骤照常通过，说明清单逐步在跑）。验完删探针文件与其提交、`rm -rf ../probe-remote.git`、`git remote remove origin`。**钩子的可执行位在这台 Windows 机器上验不出来**：git for Windows 不看 x 位，`statSync` 的 mode 又一律报 `0666`，所以 scaffold 里那句 chmod 只能靠代码路径保证、`audit` 在非 win32 平台才检查它——别因为在 Windows 上「推得动」就断定 Linux/CI 上也推得动。
+清单随栈变化：`--stack vue-ts` 是 4 步（全量测试 → 构建 → 服务端类型检查 → 行数），`--stack none` 只有 1 步行数检查——别把「只看到行数检查」当成钩子没接上。
+
+想验「真能中止」：vue-ts 项目临时加一个带类型错误的 `.ts` 文件，none 项目临时加一个超过 400 行的 `.mjs`/`.js` 文件，提交一次再跑上面的 dry-run——期望前者在「构建（含 vue-tsc 类型检查）」、后者在「行数检查」连续两次失败后打印 `[pre-push] ❌ 推送中止` 并以非 0 退出（其余步骤照常通过，说明清单逐步在跑）。验完删探针文件与其提交、`rm -rf ../probe-remote.git`、`git remote remove origin`。**钩子的可执行位在这台 Windows 机器上验不出来**：git for Windows 不看 x 位，`statSync` 的 mode 又一律报 `0666`，所以 scaffold 里那句 chmod 只能靠代码路径保证、`audit` 在非 win32 平台才检查它——别因为在 Windows 上「推得动」就断定 Linux/CI 上也推得动。
 
 ## 模式二：给已有项目上规范
 

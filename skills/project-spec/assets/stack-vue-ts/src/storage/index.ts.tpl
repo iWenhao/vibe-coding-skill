@@ -20,9 +20,17 @@ export interface KeyValueStore {
   remove(key: string): Promise<void>
 }
 
+/**
+ * 命名空间与键拼成同一种 `ns:key` 形式，本地与远程共用。
+ * 这样切换后端（或后端临时掉线回落本地）不会改变键的语义，也不会把两个用户的数据混在一起。
+ */
+function wrapKey(namespace: string, key: string): string {
+  return namespace === '' ? key : `${namespace}:${key}`
+}
+
 /** 本地回落实现：同步 API 包成 Promise，保持与远程实现同签名 */
 function createLocalStore(namespace = ''): KeyValueStore {
-  const wrap = (key: string) => (namespace === '' ? key : `${namespace}:${key}`)
+  const wrap = (key: string) => wrapKey(namespace, key)
   return {
     async get(key) {
       return localStorage.getItem(wrap(key))
@@ -41,9 +49,10 @@ import { ApiRequestError, apiData, apiFetch, CODE_KEY_NOT_FOUND } from '../api/c
 
 /**
  * 远程实现：base、凭据、拆信封全在 src/api/client，这里只回答「这个键、这个动作」。
+ * 路径用的是与本地实现完全相同的 wrapKey 结果，namespace 在这里不能丢。
  */
-function createRemoteStore(): KeyValueStore {
-  const path = (key: string) => `/storage/${encodeURIComponent(key)}`
+function createRemoteStore(namespace = ''): KeyValueStore {
+  const path = (key: string) => `/storage/${encodeURIComponent(wrapKey(namespace, key))}`
   return {
     async get(key) {
       try {
@@ -86,7 +95,7 @@ let store: KeyValueStore = createLocalStore()
 export async function initStorage(namespace?: string): Promise<void> {
 {{#BACKEND}}
   if (await probeRemote()) {
-    store = createRemoteStore()
+    store = createRemoteStore(namespace)
     return
   }
 {{/BACKEND}}

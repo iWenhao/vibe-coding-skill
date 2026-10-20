@@ -3,7 +3,7 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)；提交信息规范见 [AGENTS.md](AGENTS.md)。
 功能与修复类提交请同步更新本文件 `[Unreleased]` 区。
 
-版本规则与发版步骤（进位、YYMMDD 后缀、`package.json` 同步）见 [docs/WORKFLOW.md](docs/WORKFLOW.md)「发版与版本号」，此处不重复。
+版本规则与发版步骤（进位、YYMMDD 后缀、版本清单文件同步）见 [docs/WORKFLOW.md](docs/WORKFLOW.md)「发版与版本号」，此处不重复。
 
 ## [Unreleased]
 

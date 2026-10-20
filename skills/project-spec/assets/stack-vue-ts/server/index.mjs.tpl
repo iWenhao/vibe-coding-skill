@@ -21,14 +21,15 @@
  *
  * 安全与兼容注意点（只写代码层面的不变量；配置项与默认值一律看 .env.example，不在此重复）：
  *   - /health 不鉴权，其余 /api/* 在设置了 AUTH_TOKEN 后要求 Bearer 一致——前端正是靠 /health 判断在线；
- *   - 键名会被拼进文件路径，必须清洗（见 safeFileName），否则 `../../etc/passwd` 这类键能越出数据目录；
+ *   - 键名不会直接进入文件路径：先取 SHA-256 摘要再拼 `.json`（见 safeFileName），
+ *     既不可能越出数据目录，也不会出现 `a/b` 与 `a_b` 清洗后互相覆盖；原始键存在 JSON 里供读回。
  *   - 数据目录里的 *.json 是应用写入的真实数据，已在 .gitignore 中排除，别提交、别放进公开备份。
  */
 import { createServer } from 'node:http'
 import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { ApiError, CODES } from './lib/apiError.mjs'
 import { sendCorsPreflight, sendData, sendFail } from './lib/http.mjs'
@@ -47,11 +48,13 @@ const AUTH_TOKEN = process.env.AUTH_TOKEN ?? ''
 
 await mkdir(DATA_DIR, { recursive: true })
 
-/** 把键名压成安全文件名：只留字母数字与 . _ -，其余替换为 _，并限制长度 */
+/**
+ * 键 -> 数据文件名：用完整键的 SHA-256 摘要，而不是把非法字符替换成 `_`。
+ * 替换式清洗会让 `a/b` 与 `a_b` 落到同一个文件、互相覆盖；摘要同时保证键无法影响路径。
+ * 原始键写进 JSON，GET 时校验读到的记录确实属于这个键。
+ */
 function safeFileName(key) {
-  const cleaned = String(key).replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 120)
-  // 纯点号（.. / .）会被拼成父目录，加前缀规避
-  return cleaned.replace(/^\.+/, '_') + '.json'
+  return `${createHash('sha256').update(String(key), 'utf8').digest('hex')}.json`
 }
 
 /** 读取并解析请求体，超过上限直接拒绝 */
@@ -100,7 +103,9 @@ async function handle(req, res, url) {
   if (req.method === 'GET') {
     if (!existsSync(file)) throw new ApiError(404, CODES.KEY_NOT_FOUND, '键不存在')
     const text = await readFile(file, 'utf8')
-    return sendData(res, { key, value: JSON.parse(text).value ?? null })
+    const stored = JSON.parse(text)
+    if (stored.key !== key) throw new ApiError(500, CODES.INTERNAL, '数据文件与键名不一致')
+    return sendData(res, { key, value: stored.value ?? null })
   }
 
   if (req.method === 'PUT') {

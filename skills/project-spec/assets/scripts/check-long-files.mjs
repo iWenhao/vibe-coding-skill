@@ -37,8 +37,11 @@ export const DEFAULT_LIMITS = {
 /** 不扫描的目录名（任何层级命中即跳过） */
 export const DEFAULT_SKIP_DIRS = ['node_modules', 'dist', 'build', '.git', 'coverage', 'server/data']
 
-/** 默认扫描目录：无配置时的兜底，实际项目用 --roots 指定 */
-export const DEFAULT_ROOTS = ['src']
+/**
+ * 默认扫描仓库根：不预设源码目录名。
+ * 只写 `src` 会让 `app/`、`packages/` 这类目录里的超长文件静默漏检，而输出仍是绿色的。
+ */
+export const DEFAULT_ROOTS = ['.']
 
 /**
  * 计行：读全文后按换行切分，并丢弃末尾空元素。
@@ -70,7 +73,7 @@ function isExcluded(path, patterns) {
  * 扫描超长文件。
  * @param {string} repoRoot 仓库根（绝对路径）
  * @param {{roots?: string[], limits?: Record<string, number>, exclude?: string[], skipDirs?: string[]}} [options]
- * @returns {{over: Array<{lines: number, limit: number, path: string}>, scanned: number, skipped: number}}
+ * @returns {{over: Array<{lines: number, limit: number, path: string}>, scanned: number, skipped: number, missingRoots: string[]}}
  */
 export function scanLongFiles(repoRoot, options = {}) {
   const roots = options.roots ?? DEFAULT_ROOTS
@@ -81,6 +84,7 @@ export function scanLongFiles(repoRoot, options = {}) {
   const results = []
   let scanned = 0
   let skipped = 0
+  const missingRoots = []
 
   const walk = (dir) => {
     let entries
@@ -124,18 +128,22 @@ export function scanLongFiles(repoRoot, options = {}) {
   for (const root of roots) {
     const absolute = join(repoRoot, root)
     try {
-      if (!statSync(absolute).isDirectory()) continue
+      if (!statSync(absolute).isDirectory()) {
+        missingRoots.push(root)
+        continue
+      }
     } catch {
-      continue // 该仓库没有这个目录，正常情况
+      missingRoots.push(root)
+      continue // 该仓库没有这个目录：记下来，但不能因此把「没扫到东西」当成通过
     }
     walk(absolute)
   }
 
   results.sort((a, b) => b.lines - a.lines)
-  return { over: results, scanned, skipped }
+  return { over: results, scanned, skipped, missingRoots }
 }
 
-// CLI 入口；退出码 0 = 无超限，1 = 有超限（供 CI/钩子拦截）
+// CLI 入口；退出码 0 = 扫到了文件且无超限，1 = 有超限或一个文件都没扫到（供 CI/钩子拦截）
 const invokedDirectly =
   process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href
 
@@ -167,26 +175,35 @@ if (invokedDirectly) {
     if (ext && Number.isFinite(parsed)) limits[ext.replace(/^\./, '').toLowerCase()] = parsed
   }
 
-  const { over, skipped } = scanLongFiles(process.cwd(), {
-    roots: rootsRaw === undefined ? DEFAULT_ROOTS : rootsRaw.split(',').filter(Boolean),
+  const roots = rootsRaw === undefined ? DEFAULT_ROOTS : rootsRaw.split(',').filter(Boolean)
+  const { over, scanned, skipped, missingRoots } = scanLongFiles(process.cwd(), {
+    roots,
     exclude: excludeRaw === undefined ? [] : excludeRaw.split(',').filter(Boolean),
     limits,
   })
 
   if (asJson) {
-    console.log(JSON.stringify({ over, skipped }))
-  } else if (over.length > 0) {
-    console.log('以下文件超过行数阈值（AGENTS.md：属本次改动新增或触及的，当次拆完再提交）：')
-    for (const item of over) {
-      console.log(`  ${String(item.lines).padStart(5)} / ${item.limit}  ${item.path}`)
-    }
+    console.log(JSON.stringify({ over, scanned, skipped, missingRoots }))
   } else {
-    console.log('OK: 所有文件均在阈值以内。')
+    if (missingRoots.length > 0) {
+      console.log(`⚠️ 以下扫描根不存在，已跳过：${missingRoots.join(', ')}`)
+    }
+    if (over.length > 0) {
+      console.log('以下文件超过行数阈值（AGENTS.md：属本次改动新增或触及的，当次拆完再提交）：')
+      for (const item of over) {
+        console.log(`  ${String(item.lines).padStart(5)} / ${item.limit}  ${item.path}`)
+      }
+    } else if (scanned === 0) {
+      console.log(`⚠️ 没有扫描到任何源码文件（扫描根：${roots.join(', ')}）——本次行数检查没有执行。`)
+      console.log('   用 --roots 指定源码目录，或确认仓库里确实有 js/ts/vue/css 源码。')
+    } else {
+      console.log(`OK: 扫描 ${scanned} 个源码文件，均在阈值以内。`)
+    }
+    if (skipped > 0) {
+      console.log(`（已按例外跳过 ${skipped} 个文件——例外必须可见）`)
+    }
   }
 
-  if (skipped > 0 && !asJson) {
-    console.log(`（已按例外跳过 ${skipped} 个文件——例外必须可见）`)
-  }
-
-  process.exit(over.length > 0 ? 1 : 0)
+  // 0 个文件不是「全部合规」，而是「检查没跑起来」；与超限一样用非 0 退出，避免空转被当成绿灯
+  process.exit(over.length > 0 || scanned === 0 ? 1 : 0)
 }

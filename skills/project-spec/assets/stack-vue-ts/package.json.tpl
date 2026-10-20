@@ -10,7 +10,7 @@
     "lint": "eslint src{{#BACKEND}} server scripts{{/BACKEND}}{{^BACKEND}} scripts{{/BACKEND}}",
     "test": "vitest",
     "test:coverage": "vitest --coverage",
-    "check:lines": "node scripts/check-long-files.mjs --roots src{{#BACKEND}},server{{/BACKEND}}"{{#BACKEND}},
+    "check:lines": "node scripts/check-long-files.mjs"{{#BACKEND}},
     "server": "node server/index.mjs",
     "typecheck:server": "tsc -p tsconfig.server.json"{{/BACKEND}}
   },

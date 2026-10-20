@@ -272,14 +272,35 @@ async function main() {
   // ---------- 代码健康 ----------
   const loadedLines = await loadChecker(target, 'check-long-files.mjs')
   const fixedRoots = ['src', 'server', 'shared', 'scripts'].filter((root) => existsSync(join(target, root)))
-  const roots = fixedRoots.length > 0 ? fixedRoots : inferRoots(sourceFiles)
+  const inferredRoots = inferRoots(sourceFiles)
+  const hasRootSource = sourceFiles.some((path) => !path.includes('/'))
+  // 固定目录与推断目录是并集而不是二选一：只要 src/ 存在就只看 src/，
+  // monorepo 里的 packages/** 会被静默漏掉，报告却写着「src 内无超长文件」。
+  // 根目录直接有源码文件时改用「.」——否则 roots 只含子目录，根上的超长文件仍然漏检。
+  const roots = hasRootSource ? ['.'] : [...new Set([...fixedRoots, ...inferredRoots])]
   if (roots.length === 0) r.report('代码健康', 'info', '没有可扫描的源码目录')
   else {
-    if (fixedRoots.length === 0) r.report('代码健康', 'info', `约定目录（src/server/shared/scripts）都不存在，改用顶层源码目录：${roots.join(', ')}`)
-    if (!langs.has('node')) r.report('代码健康', 'info', `行数阈值只覆盖 js/ts/vue/css 扩展名，${langList} 的文件不参与检查（需要门槛用 --limit <扩展名>=400 自行加）`)
-    const { over, skipped } = loadedLines.mod.scanLongFiles(target, { roots, exclude: [] })
-    if (over.length === 0) r.report('代码健康', 'ok', `${roots.join(', ')} 内无超长文件`)
+    if (hasRootSource) r.report('代码健康', 'info', '仓库根存在源码文件，扫描根改用仓库根（.）')
+    else if (fixedRoots.length === 0) r.report('代码健康', 'info', `约定目录（src/server/shared/scripts）都不存在，改用顶层源码目录：${roots.join(', ')}`)
     else {
+      const extraRoots = inferredRoots.filter((root) => !fixedRoots.includes(root))
+      if (extraRoots.length > 0) r.report('代码健康', 'info', `除约定目录外，还扫描顶层源码目录：${extraRoots.join(', ')}`)
+    }
+    if (!langs.has('node')) r.report('代码健康', 'info', `行数阈值只覆盖 js/ts/vue/css 扩展名，${langList} 的文件不参与检查（需要门槛用 --limit <扩展名>=400 自行加）`)
+    const { over, scanned, skipped = 0 } = loadedLines.mod.scanLongFiles(target, { roots, exclude: [] })
+    // 旧版检查器没有 scanned 字段：照旧给结论，但不假装知道扫了多少
+    const scannedCount = typeof scanned === 'number' ? scanned : null
+    if (over.length === 0) {
+      if (scannedCount === 0 && langs.has('node')) {
+        r.report('代码健康', 'warn', `扫描根（${roots.join(', ')}）内没有参与行数检查的文件——本次行数检查未实际执行`)
+      } else if (scannedCount === 0) {
+        r.report('代码健康', 'info', '没有参与行数阈值的文件（非 Node 生态）')
+      } else if (scannedCount === null) {
+        r.report('代码健康', 'ok', `${roots.join(', ')} 内无超长文件`)
+      } else {
+        r.report('代码健康', 'ok', `${roots.join(', ')} 内扫描 ${scannedCount} 个源码文件，无超长文件`)
+      }
+    } else {
       for (const item of over.slice(0, 8)) {
         r.report('代码健康', 'warn', `超长 ${item.lines}/${item.limit} 行：${item.path}`)
       }

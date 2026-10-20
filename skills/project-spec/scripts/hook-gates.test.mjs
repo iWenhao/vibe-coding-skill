@@ -1,5 +1,10 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { spawnSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import {
   DOC_SYNC_MARKER,
   DOC_SYNC_RULES,
@@ -15,6 +20,7 @@ import {
   pickPackageManager,
   planSteps,
 } from '../assets/scripts/pre-push-check.mjs'
+import { scanLongFiles } from '../assets/scripts/check-long-files.mjs'
 
 // 本仓库吃自己的狗粮：钩子用的就是 assets/ 里这份校验器，所以它也得有自己的测试。
 // 用 node:test 而不是 vitest——本仓库零第三方依赖，`node --test "skills/project-spec/scripts/*.test.mjs"` 直接跑。
@@ -103,4 +109,74 @@ test('包管理器取仓库声明，其次 lockfile，都没有退回 npm', () =
   assert.equal(pickPackageManager({ packageManager: 'pnpm@11.5.0', files: ['package-lock.json'] }), 'pnpm')
   assert.equal(pickPackageManager({ files: ['yarn.lock'] }), 'yarn')
   assert.equal(pickPackageManager({ files: [] }), 'npm')
+})
+
+test('行数检查默认扫仓库根，src 之外的超长文件也会被扫到', () => {
+  const repo = mkdtempSync(join(tmpdir(), 'line-scan-'))
+  try {
+    mkdirSync(join(repo, 'src'), { recursive: true })
+    mkdirSync(join(repo, 'packages', 'foo'), { recursive: true })
+    writeFileSync(join(repo, 'src', 'small.ts'), 'const a = 1\n')
+    writeFileSync(join(repo, 'packages', 'foo', 'big.js'), 'x\n'.repeat(401))
+
+    const result = scanLongFiles(repo)
+    assert.equal(result.scanned, 2)
+    assert.deepEqual(
+      result.over.map((item) => item.path),
+      ['packages/foo/big.js'],
+    )
+  } finally {
+    rmSync(repo, { recursive: true, force: true })
+  }
+})
+
+test('体检在 monorepo 里扫描顶层源码目录并报出超长文件', () => {
+  const repo = mkdtempSync(join(tmpdir(), 'audit-mono-'))
+  try {
+    mkdirSync(join(repo, 'src'), { recursive: true })
+    mkdirSync(join(repo, 'packages', 'foo'), { recursive: true })
+    writeFileSync(join(repo, 'package.json'), '{"name":"mono","private":true}\n')
+    writeFileSync(join(repo, 'src', 'small.ts'), 'export const a = 1\n')
+    writeFileSync(join(repo, 'packages', 'foo', 'big.js'), 'x\n'.repeat(401))
+
+    const audit = fileURLToPath(new URL('./audit.mjs', import.meta.url))
+    const result = spawnSync(process.execPath, [audit, repo], { encoding: 'utf8' })
+    assert.equal(result.status, 1)
+    assert.match(result.stdout, /扫描顶层源码目录：packages/)
+    assert.match(result.stdout, /超长 401\/400 行：packages\/foo\/big\.js/)
+    assert.doesNotMatch(result.stdout, /体检中断/)
+  } finally {
+    rmSync(repo, { recursive: true, force: true })
+  }
+})
+
+test('体检也扫描仓库根上的源码文件', () => {
+  const repo = mkdtempSync(join(tmpdir(), 'audit-rootfile-'))
+  try {
+    mkdirSync(join(repo, 'src'), { recursive: true })
+    writeFileSync(join(repo, 'package.json'), '{"name":"root-file","private":true}\n')
+    writeFileSync(join(repo, 'src', 'small.ts'), 'export const a = 1\n')
+    writeFileSync(join(repo, 'app.js'), 'x\n'.repeat(401))
+
+    const audit = fileURLToPath(new URL('./audit.mjs', import.meta.url))
+    const result = spawnSync(process.execPath, [audit, repo], { encoding: 'utf8' })
+    assert.equal(result.status, 1)
+    assert.match(result.stdout, /扫描根改用仓库根/)
+    assert.match(result.stdout, /超长 401\/400 行：app\.js/)
+  } finally {
+    rmSync(repo, { recursive: true, force: true })
+  }
+})
+
+test('行数检查扫到 0 个文件时以非 0 退出，不把空转打印成 OK', () => {
+  const repo = mkdtempSync(join(tmpdir(), 'line-empty-'))
+  try {
+    const script = fileURLToPath(new URL('../assets/scripts/check-long-files.mjs', import.meta.url))
+    const result = spawnSync(process.execPath, [script], { cwd: repo, encoding: 'utf8' })
+    assert.equal(result.status, 1)
+    assert.match(result.stdout, /没有扫描到任何源码文件/)
+    assert.doesNotMatch(result.stdout, /OK:/)
+  } finally {
+    rmSync(repo, { recursive: true, force: true })
+  }
 })

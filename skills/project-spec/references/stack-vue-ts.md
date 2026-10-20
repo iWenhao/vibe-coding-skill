@@ -9,7 +9,7 @@ scaffold 用 `--stack vue-ts` 时生成的配置，每一项的**理由**写在�
 | `vue` + `typescript` + `vite` | 主体 | 类型检查交给 `vue-tsc`，构建交给 vite，两者分离 |
 | `pinia` | 跨组件状态 | 只放跨组件状态；单组件内的逻辑放 composable |
 | `vue-router` | 路由 | 多页面分层（列表 → 详情 → 编辑）是常见形态 |
-| `element-plus` + `@element-plus/icons-vue` | 组件库与图标 | 图标在 `main.ts` 全局注册，SFC 里**不需要 import**（unplugin 也已配 resolver） |
+| `element-plus` + `@element-plus/icons-vue` | 组件库与图标 | 组件由 unplugin 按需注入，SFC 里**不需要 import**；图标**不做全量全局注册**——`main.ts` 只注册模板实际用到的几个，新增图标在那里补一项或使用处单独导入 |
 | `@vueuse/core` | 组合式工具 | 先查这里有没有现成的，再自己写 |
 | `echarts` | 图表 | 可选 |
 | `sass` | 样式 | vite 配 `api: 'modern-compiler'`，避免旧 legacy API 告警——**这个取值要 vite ≥5.4**，下界退回 5.2 时 vite 不认识它、会无声忽略，构建时照打 `legacy-js-api` 弃用告警 |
@@ -49,7 +49,7 @@ scaffold 用 `--stack vue-ts` 时生成的配置，每一项的**理由**写在�
 
 **全量 lint 会被既有 `.vue` 报警淹没**，所以日常只跑改动文件；这条也写进了验证节奏表。
 
-**`lint` 脚本的根只能列真实存在的目录**：ESLint 9 对匹配不到文件的 pattern 直接退出 2（不是警告）。踩过——模板里预列了一个「以后可能会有」的共用目录 `shared/`，`--backend` 形态的 `pnpm lint` 从生成第一天起就从未跑过一步，而且没人注意到：它只在有人主动跑 lint 时才响。注意各套检查的覆盖面是**各自一份清单**，别假设补了一处就全都补了：`tsconfig.server.json` 的 include 里 `shared/**/*.mjs` 是预先列好的（目录一出现就被类型检查覆盖），而 `lint` 不能预列（空目录 = 退出 2）、`check-long-files.mjs` 的 `--roots` 与 vitest 的 include 也各要各的。所以纪律是：**新增顶层源码目录时把 lint 根与 `--roots` 一起补**，别等它默默不在任何清单里。
+**`lint` 脚本的根只能列真实存在的目录**：ESLint 9 对匹配不到文件的 pattern 直接退出 2（不是警告）。踩过——模板里预列了一个「以后可能会有」的共用目录 `shared/`，`--backend` 形态的 `pnpm lint` 从生成第一天起就从未跑过一步，而且没人注意到：它只在有人主动跑 lint 时才响。注意各套检查的覆盖面是**各自一份清单**，别假设补了一处就全都补了：`tsconfig.server.json` 的 include 里 `shared/**/*.mjs` 是预先列好的（目录一出现就被类型检查覆盖），而 `lint` 不能预列（空目录 = 退出 2）、vitest 的 include 又是另一份清单。行数检查不再列 `--roots`——它默认扫仓库根并跳过依赖/产物目录，`packages/`、`app/` 这类新顶层目录自动覆盖；只有手工收窄过 `--roots` 的项目才需要跟着补。纪律是：**新增顶层源码目录时把 lint 根与 vitest include 一起补**，别等它默默不在任何清单里。
 
 ## unplugin 自动生成文件
 
@@ -111,5 +111,5 @@ src/
 
 两条容易漏的：
 
-- **样式主题分层**：第三方组件库的暗色变量层（官方 `dark/css-vars.css` + `html.dark`，负责兜底）与项目品牌调色层（`dark-theme.scss`，限定在 `html.dark` 作用域）是**两层不同职责，不要合并**。清理样式时最容易把「看起来重复」的那层删掉。
+- **样式主题分层**：第三方组件库的暗色变量层（官方 `dark/css-vars.css` + `html.dark`，负责兜底）与项目品牌调色层（`src/styles/index.scss`，限定在 `html.dark` 作用域）是**两层不同职责，不要合并**。清理样式时最容易把「看起来重复」的那层删掉。
 - **同一份内容有多种渲染形态时必须同步**（如列表页与详情页、编辑器与只读预览）。改其中一种渲染必须检查另一种，否则用户在不同入口看到的结果不一致。

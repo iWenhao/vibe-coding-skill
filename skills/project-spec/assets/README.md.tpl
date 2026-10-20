@@ -35,7 +35,7 @@ git config core.hooksPath scripts/hooks
 ```
 {{/VUE_TS}}
 {{^VUE_TS}}
-【待填】install / dev / test / build 四条命令，以及「每个克隆执行一次」的本地配置（如 `git config core.hooksPath scripts/hooks`）。
+【待填】本栈的安装 / 开发 / 测试 / 构建命令（没有的项写明「无」），以及「每个克隆执行一次」的本地配置（如 `git config core.hooksPath scripts/hooks`）。
 {{/VUE_TS}}
 
 ## 项目结构

@@ -89,6 +89,17 @@ describe('storage 远程形态', () => {
     expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'DELETE')).toBe(true)
   })
 
+  it('远程形态也带命名空间：请求路径与本地键保持同一种 ns:key 语义', async () => {
+    const fetchMock = stubRemoteFetch('ok')
+    vi.stubGlobal('fetch', fetchMock)
+    await initStorage('alice')
+    await getStorage().get('theme')
+
+    // encodeURIComponent('alice:theme') = alice%3Atheme
+    const dataCall = fetchMock.mock.calls.find(([input]) => String(input) !== '/api/health')
+    expect(String(dataCall?.[0])).toBe('/api/storage/alice%3Atheme')
+  })
+
   it('键确实没写过（KEY_NOT_FOUND）读出 null，与本地形态同义', async () => {
     vi.stubGlobal('fetch', stubRemoteFetch('key-missing'))
     await initStorage()
