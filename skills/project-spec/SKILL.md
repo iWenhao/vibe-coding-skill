@@ -107,7 +107,7 @@ git push --dry-run origin <分支>     # 应看到 [pre-push] 全量清单，全
 
 清单随栈变化：`--stack vue-ts` 是 4 步（全量测试 → 构建 → 服务端类型检查 → 行数），`--stack none` 只有 1 步行数检查——别把「只看到行数检查」当成钩子没接上。
 
-想验「真能中止」：vue-ts 项目临时加一个带类型错误的 `.ts` 文件，none 项目临时加一个超过 400 行的 `.mjs`/`.js` 文件，提交一次再跑上面的 dry-run——期望前者在「构建（含 vue-tsc 类型检查）」、后者在「行数检查」连续两次失败后打印 `[pre-push] ❌ 推送中止` 并以非 0 退出（其余步骤照常通过，说明清单逐步在跑）。验完删探针文件与其提交、`rm -rf ../probe-remote.git`、`git remote remove origin`。**钩子的可执行位在这台 Windows 机器上验不出来**：git for Windows 不看 x 位，`statSync` 的 mode 又一律报 `0666`，所以 scaffold 里那句 chmod 只能靠代码路径保证、`audit` 在非 win32 平台才检查它——别因为在 Windows 上「推得动」就断定 Linux/CI 上也推得动。
+想验「真能中止」：vue-ts 项目临时加一个带类型错误的 `.ts` 文件，none 项目临时加一个超过 400 行的 `.mjs`/`.js` 文件，提交一次再跑上面的 dry-run——期望前者在「构建（含 vue-tsc 类型检查）」、后者在「行数检查」连续两次失败后打印 `[pre-push] ❌ 推送中止` 并以非 0 退出（其余步骤照常通过，说明清单逐步在跑）。验完删探针文件与其提交、`rm -rf ../probe-remote.git`、`git remote remove origin`。**钩子的可执行位在这台 Windows 机器上验不出来**：git for Windows 不看 x 位，`statSync` 的 mode 又一律报 `0666`，所以 scaffold 里那句 chmod 只能靠代码路径保证、`audit` 在非 win32 平台才检查它——别因为在 Windows 上「推得动」就断定 Linux/CI 上也推得动。项目若已按 [references/verification-ci.md](references/verification-ci.md) 把全量移到 CI，这里的预期步骤按那份文档改——pre-push 只跑轻量集，别拿全量清单去验。
 
 ## 模式二：给已有项目上规范
 
@@ -144,6 +144,8 @@ node <skill-dir>/scripts/audit.mjs [目标目录，默认当前]
 8. **验证节奏**——默认动作是「跑受影响的测试」而不是全量（受限环境里全量的绿灯本身可能不可信），按改动范围分级的表格，含「用户可见输出必须真跑一次」这条优先级最高的例外。
 9. **测试**——单测放被测文件同目录；核心逻辑补测，UI 不强求但改 UI 要浏览器实测；纯逻辑用例自己声明轻量环境，别一律吃浏览器模拟环境。
 
+默认档的权威时机是 pre-push 全量；只有 CI 能机器强制时才把全量上移。这个可选档的切换方案与前置条件见 [references/verification-ci.md](references/verification-ci.md)，默认不启用——别把这段当九节清单的一部分写进项目。
+
 技术栈相关细节（strict 四件套、ESLint flat 双块、vitest include、按范围挑着跑的三条命令与纯逻辑用例的环境头、unplugin dts、服务端 tsconfig、前端可选后端与回落存储）见 [references/stack-vue-ts.md](references/stack-vue-ts.md)。
 
 ## 关键取舍
@@ -164,6 +166,7 @@ node <skill-dir>/scripts/audit.mjs [目标目录，默认当前]
 - [references/conventions-kernel.md](references/conventions-kernel.md)——栈无关约定内核全文（提交/文档同步/版本/CHANGELOG/并行改动隔离/接口响应信封/防重复/拆分/进度清单/验证分级/测试）。
 - [references/stack-vue-ts.md](references/stack-vue-ts.md)——Vue3 + TS + Vite + Pinia 落地细节与配置逐项理由。
 - [references/pitfalls.md](references/pitfalls.md)——「环境与已知坑」一节的写法规约与通用条目。
+- [references/verification-ci.md](references/verification-ci.md)——可选档：把全量从 pre-push 移到强制 CI 的前置条件、实现要点、落地顺序与本仓库改动点（默认不启用）。
 - `scripts/scaffold.mjs`——生成骨架，支持 `--stack vue-ts|none`、`--backend`、`--link-hooks`。
 - `scripts/audit.mjs`——五组检查的体检清单，退出码反映是否有缺失。
 - `scripts/repo-facts.mjs`——audit 的事实探测层（读文件、走目录、判语言、跑 git、加载目标仓库自己的校验器）；**只探不判**，所有 ⬜/⚠️ 判定留在 audit.mjs。

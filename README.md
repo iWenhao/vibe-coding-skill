@@ -12,6 +12,7 @@
 - **提交信息机械拦截**：`commit-msg` 钩子调用 Node 校验器，标题必须命中前缀白名单且不超 30 字符（汉字算 1 个，按 Unicode 码点计，避开 shell 按字节统计的误判）。
 - **文档同步拦截**：`DOC_SYNC_RULES` 是**成对规则**——命中某条规则的文件被改动、而那条规则要求的那份文档没进暂存区时，钩子拒绝提交。默认两条：`package.json`、根目录 `*.config.*`、`tsconfig*`、`.env.example`、`pnpm-workspace.yaml` → `README.md`；`server/**`、`src/api/**` → `docs/DEPLOY.md` 的「接口错误码」。规则清单是脚本头可见常量，按项目增删；豁免标记 `[skip-docs]` 写进提交正文、随历史入库可 grep，确保快速开始与码表都不会变成谎言。
 - **推送前全量把关**：`pre-push` 钩子调用 `pre-push-check.mjs`，按仓库实际能力跑「全量测试 → 构建（含类型检查）→ 服务端类型 → 行数检查」（`--stack none` 没有前几步，只跑行数检查），任一步失败自动重试一次、仍失败即中止推送；只推 tag 或只删远端引用时跳过，不为没有新代码的推送白等几分钟。清单里不含 lint——全量 lint 会被既有报警淹没，它留在「只跑改动文件」那一档。
+- **可选：本地轻量 + CI 全量**：默认仍是上面的推送前全量；项目有**强制 CI**（分支保护、CI 绿才能合并）时，可按 [references/verification-ci.md](skills/project-spec/references/verification-ci.md) 把全量移到 CI，pre-push 只跑 diff 映射的测试 + 类型检查 + 行数检查。前置条件、实现要点与回退路径都在那份文档里；scaffold 默认不生成 CI。
 - **给已有仓库体检上规范**：`audit` 按「文件级 / 执行级 / 配置级 / 历史级 / 代码健康」五组输出 ✅ 已具备、⬜ 缺失、⚠️ 存在但不合规、· 说明（如非 Node 项目跳过某些检查），只补缺项、不覆盖项目已有约定。文件级里含一条 `AGENTS.md` 体积检查——按 Codex `project_doc_max_bytes` 的默认预算（32 KiB，项目根到工作目录逐层合并计算）报字节数与占比，≥75% 提醒、超预算报缺失。
 - **可选技术栈落地**：`--stack vue-ts` 额外生成 Vue3 + TypeScript + Vite + Pinia + Element Plus 的完整配置与最小可跑入口；`--backend` 再加一个本地零依赖 Node 存储后端（不启动则前端回落 localStorage）。
 - **跨平台的行数阈值检查**：用 `.mjs` 而不是 `.ps1`，CI 与非 Windows agent 同样可跑，计行结果与行尾风格无关。
@@ -160,6 +161,7 @@ skills/project-spec/            ← 一个完整的 Agent Skill，可整目录�
     conventions-kernel.md           栈无关约定内核全文
     stack-vue-ts.md                 技术栈落地细节与逐项配置理由
     pitfalls.md                     「环境与已知坑」的写法规约与通用条目
+    verification-ci.md              可选档：全量移到强制 CI 的切换方案（默认不启用）
 ```
 
 脚本用 `import.meta.url` 相对定位资源，所以整目录搬到任何路径、任何机器都能跑；`assets/` 只在 scaffold 时读取，无需预先加载进上下文，`references/` 按需展开——`SKILL.md` 只保留决策所需的主干，这正是渐进式披露（progressive disclosure）的省上下文做法。
